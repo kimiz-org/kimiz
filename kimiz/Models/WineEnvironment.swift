@@ -22,7 +22,19 @@ enum WineBackend: String, CaseIterable, Hashable {
             let bundlePath = Bundle.main.bundlePath
             return "\(bundlePath)/Contents/Resources/wine/bin/wine"
         case .wine:
-            return "/usr/local/bin/wine"
+            // Check for Wine in multiple locations
+            let paths = [
+                "/usr/local/bin/wine64",  // Intel Homebrew
+                "/opt/homebrew/bin/wine64",  // Apple Silicon Homebrew
+                "/usr/local/bin/wine",  // Alternative
+                "/opt/homebrew/bin/wine",  // Alternative
+            ]
+            for path in paths {
+                if FileManager.default.fileExists(atPath: path) {
+                    return path
+                }
+            }
+            return "/usr/local/bin/wine64"  // Default fallback
         case .crossover:
             return "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wine"
         case .gamePortingToolkit:

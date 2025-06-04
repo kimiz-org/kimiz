@@ -11,10 +11,7 @@ struct GamesLibraryView: View {
     @EnvironmentObject var embeddedWineManager: EmbeddedWineManager
     @State private var searchText = ""
     @State private var selectedGame: GameInstallation?
-    @State private var showingGameDetails = false
     @State private var isRefreshing = false
-    @State private var animateHeader = false
-    @State private var animateCards = false
 
     var filteredGames: [GameInstallation] {
         if searchText.isEmpty {
@@ -26,42 +23,179 @@ struct GamesLibraryView: View {
     }
 
     var body: some View {
-        ZStack {
-            // Background gradient
-            LinearGradient(
-                colors: [
-                    Color.blue.opacity(0.1),
-                    Color.purple.opacity(0.1),
-                    Color.clear,
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea(.all)
-
+        NavigationView {
             VStack(spacing: 0) {
-                // Header Section
-                headerSection
-
-                // Content Section
-                contentSection
+                // Search bar
+                searchBar
+                
+                // Games list
+                if filteredGames.isEmpty {
+                    emptyStateView
+                } else {
+                    gamesList
+                }
+            }
+            .navigationTitle("Games")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Refresh") {
+                        refreshGames()
+                    }
+                    .disabled(isRefreshing)
+                }
             }
         }
-        .onAppear {
-            startAnimations()
-        }
-        .sheet(item: $selectedGame) { game in
-            GameDetailsView(game: game)
+        .task {
+            await embeddedWineManager.scanForInstalledGames()
         }
     }
+    
+    // MARK: - Search Bar
+    private var searchBar: some View {
+        HStack {
+            Image(systemName: "magnifyingglass")
+                .foregroundColor(.secondary)
+            
+            TextField("Search games...", text: $searchText)
+                .textFieldStyle(.plain)
+        }
+        .padding(12)
+        .background(Color(NSColor.controlBackgroundColor))
+        .cornerRadius(8)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+    }
+    
+    // MARK: - Games List
+    private var gamesList: some View {
+        List(filteredGames) { game in
+            GameRowView(game: game) {
+                launchGame(game)
+            }
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+        }
+        .listStyle(.plain)
+        .refreshable {
+            await embeddedWineManager.scanForInstalledGames()
+        }
+    }
+    
+    // MARK: - Empty State
+    private var emptyStateView: some View {
+        VStack(spacing: 24) {
+            Image(systemName: "gamecontroller")
+                .font(.system(size: 48))
+                .foregroundColor(.secondary)
+            
+            VStack(spacing: 8) {
+                Text("No Games Found")
+                    .font(.title2)
+                    .fontWeight(.medium)
+                
+                Text("Install Steam or add games to get started")
+                    .font(.body)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            
+            Button("Install Steam") {
+                installSteam()
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(NSColor.windowBackgroundColor))
+    }
+    
+    // MARK: - Actions
+    private func refreshGames() {
+        isRefreshing = true
+        Task {
+            await embeddedWineManager.scanForInstalledGames()
+            await MainActor.run {
+                isRefreshing = false
+            }
+        }
+    }
+    
+    private func launchGame(_ game: GameInstallation) {
+        Task {
+            do {
+                try await embeddedWineManager.launchGame(game)
+            } catch {
+                print("Failed to launch game: \(error)")
+            }
+        }
+    }
+    
+    private func installSteam() {
+        Task {
+            do {
+                try await embeddedWineManager.installSteam()
+                await embeddedWineManager.scanForInstalledGames()
+            } catch {
+                print("Failed to install Steam: \(error)")
+            }
+        }
+    }
+}
 
-    // MARK: - Header Section
-    private var headerSection: some View {
-        VStack(spacing: 20) {
-            HStack {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Game Library")
-                        .font(.system(size: 32, weight: .bold, design: .rounded))
+// MARK: - Game Row View
+struct GameRowView: View {
+    let game: GameInstallation
+    let onLaunch: () -> Void
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Game icon placeholder
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.accentColor.opacity(0.2))
+                .frame(width: 48, height: 48)
+                .overlay(
+                    Image(systemName: "gamecontroller.fill")
+                        .foregroundColor(.accentColor)
+                )
+            
+            // Game info
+            VStack(alignment: .leading, spacing: 4) {
+                Text(game.name)
+                    .font(.headline)
+                    .lineLimit(1)
+                
+                if let lastPlayed = game.lastPlayed {
+                    Text("Last played: \(lastPlayed, style: .relative)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } else {
+                    Text("Never played")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            Spacer()
+            
+            // Launch button
+            Button("Play") {
+                onLaunch()
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .background(Color(NSColor.controlBackgroundColor))
+        .cornerRadius(12)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 4)
+    }
+}
+
+#Preview {
+    GamesLibraryView()
+        .environmentObject(EmbeddedWineManager())
+}
                         .foregroundStyle(
                             LinearGradient(
                                 colors: [.primary, .blue],

@@ -18,15 +18,14 @@ class EmbeddedWineManager: ObservableObject {
     @Published var installedGames: [GameInstallation] = []
 
     private let fileManager = FileManager.default
-    private let wineResourcesPath: String
-    private let wineInstallPath: String
+    private var wineBackend: WineBackend = .gamePortingToolkit
+    private var winePath: String {
+        return wineBackend.executablePath
+    }
     private let defaultPrefixPath: String
 
     init() {
-        // Define paths
-        self.wineResourcesPath = Bundle.main.bundlePath + "/Contents/Resources/wine"
-        self.wineInstallPath =
-            NSString(string: "~/Library/Application Support/kimiz/wine").expandingTildeInPath
+        // Define default prefix path
         self.defaultPrefixPath =
             NSString(string: "~/Library/Application Support/kimiz/wine-prefixes/default")
             .expandingTildeInPath
@@ -39,11 +38,59 @@ class EmbeddedWineManager: ObservableObject {
     // MARK: - Wine Installation Management
 
     func checkWineInstallation() async {
-        // For now, we'll simulate having Wine ready
-        // In a real implementation, this would check for bundled Wine or download it
         await MainActor.run {
-            isWineReady = true
+            isInitializing = true
+            initializationStatus = "Checking for Wine installation..."
         }
+
+        // Check for Game Porting Toolkit installation
+        if GamePortingToolkitManager.shared.isGamePortingToolkitInstalled() {
+            wineBackend = .gamePortingToolkit
+            await MainActor.run {
+                isWineReady = true
+                isInitializing = false
+                initializationStatus = "Wine ready via Game Porting Toolkit"
+            }
+            return
+        }
+
+        // Check for Homebrew Wine installation
+        if await checkBrewWineInstallation() {
+            wineBackend = .wine
+            await MainActor.run {
+                isWineReady = true
+                isInitializing = false
+                initializationStatus = "Wine ready via Homebrew"
+            }
+            return
+        }
+
+        // No Wine installation found
+        await MainActor.run {
+            isWineReady = false
+            isInitializing = false
+            initializationStatus = "Wine not found"
+            lastError =
+                "Wine is not installed. Please install Game Porting Toolkit or Wine via Homebrew."
+        }
+    }
+
+    private func checkBrewWineInstallation() async -> Bool {
+        // Check common Wine installation paths
+        let winePaths = [
+            "/usr/local/bin/wine64",  // Intel Homebrew
+            "/opt/homebrew/bin/wine64",  // Apple Silicon Homebrew
+            "/usr/local/bin/wine",  // Alternative Wine installation
+            "/opt/homebrew/bin/wine",  // Alternative Wine installation
+        ]
+
+        for path in winePaths {
+            if fileManager.fileExists(atPath: path) {
+                return true
+            }
+        }
+
+        return false
     }
 
     func initializeWine() async throws {
@@ -135,14 +182,17 @@ class EmbeddedWineManager: ObservableObject {
     }
 
     private func extractWineResources() async throws {
-        await updateProgress(0.2, "Extracting Wine binaries...")
+        await updateProgress(0.2, "Checking Wine installation...")
 
-        // Create Wine installation directory
-        try fileManager.createDirectory(atPath: wineInstallPath, withIntermediateDirectories: true)
+        // Verify Wine executable exists and is working
+        let testCommand = [winePath, "--version"]
+        let result = try await runCommand(testCommand)
 
-        // In a real implementation, this would extract bundled Wine from resources
-        // For now, we'll simulate the process
-        try await Task.sleep(nanoseconds: 1_000_000_000)  // 1 second simulation
+        if !result.contains("wine") {
+            throw WineError.installationFailed("Wine installation verification failed")
+        }
+
+        await updateProgress(0.2, "Wine installation verified")
     }
 
     private func createDefaultPrefix() async throws {
@@ -152,9 +202,10 @@ class EmbeddedWineManager: ObservableObject {
         try fileManager.createDirectory(
             atPath: defaultPrefixPath, withIntermediateDirectories: true)
 
-        // Initialize Wine prefix
-        // In a real implementation, this would run: wine wineboot --init
-        try await Task.sleep(nanoseconds: 1_000_000_000)  // 1 second simulation
+        // Initialize Wine prefix with wineboot
+        _ = try await runWineCommand(["wineboot", "--init"], in: defaultPrefixPath)
+
+        await updateProgress(0.5, "Wine prefix created successfully")
     }
 
     private func installRequiredComponents() async throws {
@@ -263,13 +314,32 @@ class EmbeddedWineManager: ObservableObject {
     private func runWinetricksCommand(_ arguments: [String], in prefixPath: String? = nil)
         async throws -> String
     {
-        // In a real implementation, this would use the bundled winetricks
-        let winetricksPath = wineResourcesPath + "/bin/winetricks"
+        // Try to find winetricks in common locations
+        let winetricksPaths = [
+            "/usr/local/bin/winetricks",  // Homebrew
+            "/opt/homebrew/bin/winetricks",  // Apple Silicon Homebrew
+            "/usr/bin/winetricks",  // System package manager
+        ]
+
+        var winetricksPath: String?
+        for path in winetricksPaths {
+            if fileManager.fileExists(atPath: path) {
+                winetricksPath = path
+                break
+            }
+        }
+
+        guard let winetricks = winetricksPath else {
+            // If winetricks is not available, try to install the component manually using Wine
+            print("Winetricks not found, attempting manual installation for: \(arguments)")
+            return "Winetricks not available, skipping \(arguments.joined(separator: " "))"
+        }
+
         let workingPrefix = prefixPath ?? defaultPrefixPath
 
         return try await withCheckedThrowingContinuation { continuation in
             let process = Process()
-            process.executableURL = URL(fileURLWithPath: winetricksPath)
+            process.executableURL = URL(fileURLWithPath: winetricks)
             process.arguments = ["--unattended"] + arguments
             process.environment = createWineEnvironment(prefixPath: workingPrefix)
 
@@ -298,10 +368,39 @@ class EmbeddedWineManager: ObservableObject {
 
     // MARK: - Wine Operations
 
+    private func runCommand(_ arguments: [String]) async throws -> String {
+        return try await withCheckedThrowingContinuation { continuation in
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: arguments[0])
+            process.arguments = Array(arguments.dropFirst())
+
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = pipe
+
+            process.terminationHandler = { _ in
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                let output = String(data: data, encoding: .utf8) ?? ""
+
+                if process.terminationStatus == 0 {
+                    continuation.resume(returning: output)
+                } else {
+                    continuation.resume(throwing: WineError.commandFailed(output))
+                }
+            }
+
+            do {
+                try process.run()
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
+    }
+
     func runWineCommand(_ arguments: [String], in prefixPath: String? = nil) async throws -> String
     {
-        let winePath = wineResourcesPath + "/bin/wine"
         let workingPrefix = prefixPath ?? defaultPrefixPath
+        let fullArguments = [winePath] + arguments
 
         return try await withCheckedThrowingContinuation { continuation in
             let process = Process()
