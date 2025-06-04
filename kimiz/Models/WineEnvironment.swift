@@ -19,7 +19,8 @@ enum WineBackend: String, CaseIterable, Hashable {
         switch self {
         case .embedded:
             // Wine bundled within the app
-            return Bundle.main.bundlePath + "/Contents/Resources/wine/bin/wine"
+            let bundlePath = Bundle.main.bundlePath
+            return "\(bundlePath)/Contents/Resources/wine/bin/wine"
         case .wine:
             return "/usr/local/bin/wine"
         case .crossover:
@@ -41,7 +42,7 @@ enum WineBackend: String, CaseIterable, Hashable {
             return "~/Library/Application Support/kimiz/gptk-bottles"
         }
     }
-    
+
     var isEmbedded: Bool {
         return self == .embedded
     }
@@ -97,5 +98,28 @@ struct GameInstallation: Identifiable {
         self.lastPlayed = nil
         self.playTime = 0
         self.isInstalled = false
+    }
+}
+
+enum WineError: LocalizedError {
+    case prefixCreationFailed(String)
+    case executionFailed(String)
+    case installationFailed(String)
+    case commandFailed(String)
+    case invalidURL
+
+    var errorDescription: String? {
+        switch self {
+        case .prefixCreationFailed(let message):
+            return "Wine Prefix Creation Failed: \(message)"
+        case .executionFailed(let message):
+            return "Execution Failed: \(message)"
+        case .installationFailed(let message):
+            return "Installation Failed: \(message)"
+        case .commandFailed(let output):
+            return "Wine command failed: \(output)"
+        case .invalidURL:
+            return "Invalid download URL"
+        }
     }
 }

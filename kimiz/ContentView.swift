@@ -8,34 +8,33 @@
 import SwiftUI
 
 struct ContentView: View {
-    @EnvironmentObject var wineManager: WineManager
+    @StateObject private var embeddedWineManager = EmbeddedWineManager()
     @State private var selectedTab = 0
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @State private var showOnboarding = false
 
     var body: some View {
         Group {
-            if wineManager.embeddedWineManager.isWineInstalled && !wineManager.winePrefixes.isEmpty {
-                MainTabView(selectedTab: $selectedTab)
+            if hasCompletedOnboarding && embeddedWineManager.isWineReady {
+                mainInterface
             } else {
-                OnboardingView()
+                OnboardingView(showOnboarding: $showOnboarding)
+                    .environmentObject(embeddedWineManager)
             }
         }
         .onAppear {
-            checkOnboardingStatus()
+            if !hasCompletedOnboarding {
+                showOnboarding = true
+            }
+        }
+        .onChange(of: showOnboarding) { _, newValue in
+            if !newValue {
+                hasCompletedOnboarding = true
+            }
         }
     }
-    
-    private func checkOnboardingStatus() {
-        // Check if we need to show onboarding
-        showOnboarding = !wineManager.embeddedWineManager.isWineInstalled || wineManager.winePrefixes.isEmpty
-    }
-}
 
-struct MainTabView: View {
-    @Binding var selectedTab: Int
-    @EnvironmentObject var wineManager: WineManager
-    
-    var body: some View {
+    private var mainInterface: some View {
         TabView(selection: $selectedTab) {
             GamesLibraryView()
                 .tabItem {
@@ -44,28 +43,22 @@ struct MainTabView: View {
                 }
                 .tag(0)
 
-            WinePrefixesView()
-                .tabItem {
-                    Image(systemName: "server.rack")
-                    Text("Wine Prefixes")
-                }
-                .tag(1)
-
+            // Simplified - remove Wine Prefixes tab since we're using embedded Wine
             InstallationView()
                 .tabItem {
                     Image(systemName: "plus.circle")
                     Text("Install")
                 }
-                .tag(2)
+                .tag(1)
 
             SettingsView()
                 .tabItem {
                     Image(systemName: "gear")
                     Text("Settings")
                 }
-                .tag(3)
+                .tag(2)
         }
-        .environmentObject(wineManager)
+        .environmentObject(embeddedWineManager)
     }
 }
 

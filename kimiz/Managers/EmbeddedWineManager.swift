@@ -1,0 +1,576 @@
+//
+//  EmbeddedWineManager.swift
+//  kimiz
+//
+//  Created by Ahmet Affan Ebcioğlu on 4.06.2025.
+//
+
+import Combine
+import Foundation
+
+@MainActor
+class EmbeddedWineManager: ObservableObject {
+    @Published var isWineReady = false
+    @Published var isInitializing = false
+    @Published var initializationProgress: Double = 0.0
+    @Published var initializationStatus = "Preparing Wine environment..."
+    @Published var lastError: String?
+    @Published var installedGames: [GameInstallation] = []
+
+    private let fileManager = FileManager.default
+    private let wineResourcesPath: String
+    private let wineInstallPath: String
+    private let defaultPrefixPath: String
+
+    init() {
+        // Define paths
+        self.wineResourcesPath = Bundle.main.bundlePath + "/Contents/Resources/wine"
+        self.wineInstallPath =
+            NSString(string: "~/Library/Application Support/kimiz/wine").expandingTildeInPath
+        self.defaultPrefixPath =
+            NSString(string: "~/Library/Application Support/kimiz/wine-prefixes/default")
+            .expandingTildeInPath
+
+        Task {
+            await checkWineInstallation()
+        }
+    }
+
+    // MARK: - Wine Installation Management
+
+    func checkWineInstallation() async {
+        // For now, we'll simulate having Wine ready
+        // In a real implementation, this would check for bundled Wine or download it
+        await MainActor.run {
+            isWineReady = true
+        }
+    }
+
+    func initializeWine() async throws {
+        guard !isWineReady else { return }
+
+        await MainActor.run {
+            isInitializing = true
+            initializationProgress = 0.0
+            initializationStatus = "Initializing embedded Wine environment..."
+        }
+
+        do {
+            try await extractWineResources()
+            await updateProgress(0.3, "Creating Wine prefix for high-performance gaming...")
+
+            try await createDefaultPrefix()
+            await updateProgress(0.5, "Configuring Windows 10 compatibility...")
+
+            try await configureWinePrefix()
+            await updateProgress(0.7, "Installing gaming performance optimizations...")
+
+            try await configureGamingOptimizations(in: defaultPrefixPath)
+            await updateProgress(0.9, "Installing essential gaming components...")
+
+            try await installCoreGamingComponents()
+
+            await MainActor.run {
+                isWineReady = true
+                isInitializing = false
+                initializationProgress = 1.0
+                initializationStatus = "Wine environment ready for gaming!"
+            }
+        } catch {
+            await MainActor.run {
+                isInitializing = false
+                lastError = "Failed to initialize Wine: \(error.localizedDescription)"
+            }
+            throw error
+        }
+    }
+
+    private func configureWinePrefix() async throws {
+        // Set Windows version to Windows 10 for better game compatibility
+        _ = try await runWineCommand(["winecfg", "/v", "win10"], in: defaultPrefixPath)
+
+        // Configure basic Wine settings for gaming
+        let basicCommands = [
+            [
+                "regedit", "/S", "/C",
+                "reg add \"HKCU\\Software\\Wine\\DllOverrides\" /v \"winemenubuilder.exe\" /t REG_SZ /d \"\"",
+            ],
+            [
+                "regedit", "/S", "/C",
+                "reg add \"HKCU\\Software\\Wine\\Version\" /v \"Windows\" /t REG_SZ /d \"win10\"",
+            ],
+        ]
+
+        for command in basicCommands {
+            do {
+                _ = try await runWineCommand(command, in: defaultPrefixPath)
+            } catch {
+                print("Basic configuration command failed: \(command), error: \(error)")
+            }
+        }
+    }
+
+    private func installCoreGamingComponents() async throws {
+        // Install only the most essential components for basic gaming
+        let coreComponents = [
+            "vcrun2019",  // Visual C++ 2019 (most important for modern games)
+            "d3dx9",  // DirectX 9 (widely used by games)
+            "corefonts",  // Essential fonts for proper text rendering
+        ]
+
+        let progressStep = 0.2 / Double(coreComponents.count)
+        var currentProgress = 0.9
+
+        for component in coreComponents {
+            do {
+                await updateProgress(currentProgress, "Installing \(component)...")
+                _ = try await runWinetricksCommand([component], in: defaultPrefixPath)
+                currentProgress += progressStep
+            } catch {
+                // Continue with other components
+                print("Failed to install core component \(component): \(error)")
+                currentProgress += progressStep
+            }
+        }
+    }
+
+    private func extractWineResources() async throws {
+        await updateProgress(0.2, "Extracting Wine binaries...")
+
+        // Create Wine installation directory
+        try fileManager.createDirectory(atPath: wineInstallPath, withIntermediateDirectories: true)
+
+        // In a real implementation, this would extract bundled Wine from resources
+        // For now, we'll simulate the process
+        try await Task.sleep(nanoseconds: 1_000_000_000)  // 1 second simulation
+    }
+
+    private func createDefaultPrefix() async throws {
+        await updateProgress(0.5, "Creating default Wine prefix...")
+
+        // Create default Wine prefix directory
+        try fileManager.createDirectory(
+            atPath: defaultPrefixPath, withIntermediateDirectories: true)
+
+        // Initialize Wine prefix
+        // In a real implementation, this would run: wine wineboot --init
+        try await Task.sleep(nanoseconds: 1_000_000_000)  // 1 second simulation
+    }
+
+    private func installRequiredComponents() async throws {
+        await updateProgress(0.8, "Installing required components...")
+
+        // Install essential Windows components like vcredist, .NET Framework, etc.
+        // This would use winetricks or similar
+        try await Task.sleep(nanoseconds: 1_000_000_000)  // 1 second simulation
+    }
+
+    private func updateProgress(_ progress: Double, _ status: String) async {
+        await MainActor.run {
+            initializationProgress = progress
+            initializationStatus = status
+        }
+    }
+
+    // MARK: - Gaming Performance Optimizations
+
+    private func configureGamingOptimizations(in prefixPath: String) async throws {
+        // Set Windows version to Windows 10 for better game compatibility
+        _ = try await runWineCommand(["winecfg", "/v", "win10"], in: prefixPath)
+
+        // Configure Wine for gaming performance
+        let wineConfigCommands = [
+            // Enable CSMT (Command Stream Multi-Threading) for better graphics performance
+            [
+                "regedit", "/S", "/C",
+                "reg add \"HKCU\\Software\\Wine\\Direct3D\" /v \"csmt\" /t REG_DWORD /d 1",
+            ],
+
+            // Set video memory size (1GB for modern games)
+            [
+                "regedit", "/S", "/C",
+                "reg add \"HKCU\\Software\\Wine\\Direct3D\" /v \"VideoMemorySize\" /t REG_DWORD /d 1024",
+            ],
+
+            // Enable multisampling for better graphics
+            [
+                "regedit", "/S", "/C",
+                "reg add \"HKCU\\Software\\Wine\\Direct3D\" /v \"Multisampling\" /t REG_DWORD /d 1",
+            ],
+
+            // Optimize audio latency
+            [
+                "regedit", "/S", "/C",
+                "reg add \"HKCU\\Software\\Wine\\Drivers\" /v \"Audio\" /t REG_SZ /d \"coreaudio\"",
+            ],
+
+            // Set high performance power profile
+            [
+                "regedit", "/S", "/C",
+                "reg add \"HKLM\\System\\CurrentControlSet\\Control\\Power\" /v \"CsEnabled\" /t REG_DWORD /d 0",
+            ],
+        ]
+
+        for command in wineConfigCommands {
+            do {
+                _ = try await runWineCommand(command, in: prefixPath)
+            } catch {
+                // Continue with other optimizations even if one fails
+                print("Gaming optimization command failed: \(command), error: \(error)")
+            }
+        }
+    }
+
+    private func installGamingDependencies(in prefixPath: String) async throws {
+        // Install essential Windows components for gaming
+        let dependencies = [
+            // Visual C++ Redistributables (essential for most games)
+            "vcrun2019",
+
+            // DirectX End-User Runtimes
+            "d3dx9",
+            "d3dx10",
+            "d3dx11_43",
+
+            // .NET Framework (required by many games)
+            "dotnet48",
+
+            // Media Foundation (for video codecs)
+            "mf",
+
+            // Windows Media Format
+            "wmf",
+
+            // DirectSound and DirectMusic
+            "dsound",
+            "dmusic",
+
+            // Core fonts for proper text rendering
+            "corefonts",
+        ]
+
+        for dependency in dependencies {
+            do {
+                // Use winetricks to install dependencies
+                _ = try await runWinetricksCommand([dependency], in: prefixPath)
+            } catch {
+                // Continue with other dependencies even if one fails
+                print("Failed to install \(dependency): \(error)")
+            }
+        }
+    }
+
+    private func runWinetricksCommand(_ arguments: [String], in prefixPath: String? = nil)
+        async throws -> String
+    {
+        // In a real implementation, this would use the bundled winetricks
+        let winetricksPath = wineResourcesPath + "/bin/winetricks"
+        let workingPrefix = prefixPath ?? defaultPrefixPath
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: winetricksPath)
+            process.arguments = ["--unattended"] + arguments
+            process.environment = createWineEnvironment(prefixPath: workingPrefix)
+
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = pipe
+
+            process.terminationHandler = { _ in
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                let output = String(data: data, encoding: .utf8) ?? ""
+
+                if process.terminationStatus == 0 {
+                    continuation.resume(returning: output)
+                } else {
+                    continuation.resume(throwing: WineError.commandFailed(output))
+                }
+            }
+
+            do {
+                try process.run()
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
+    }
+
+    // MARK: - Wine Operations
+
+    func runWineCommand(_ arguments: [String], in prefixPath: String? = nil) async throws -> String
+    {
+        let winePath = wineResourcesPath + "/bin/wine"
+        let workingPrefix = prefixPath ?? defaultPrefixPath
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: winePath)
+            process.arguments = arguments
+            process.environment = createWineEnvironment(prefixPath: workingPrefix)
+
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = pipe
+
+            process.terminationHandler = { _ in
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                let output = String(data: data, encoding: .utf8) ?? ""
+
+                if process.terminationStatus == 0 {
+                    continuation.resume(returning: output)
+                } else {
+                    continuation.resume(throwing: WineError.commandFailed(output))
+                }
+            }
+
+            do {
+                try process.run()
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
+    }
+
+    func installSteam(in prefixPath: String? = nil) async throws {
+        let workingPrefix = prefixPath ?? defaultPrefixPath
+
+        await updateProgress(0.1, "Downloading Steam for Windows...")
+
+        // Download Windows Steam installer
+        let steamInstallerURL = "https://steamcdn-a.akamaihd.net/client/installer/SteamSetup.exe"
+        let installerPath = try await downloadFile(from: steamInstallerURL, to: "SteamSetup.exe")
+
+        await updateProgress(0.3, "Installing Windows Steam...")
+
+        // Install Steam silently with Windows compatibility
+        _ = try await runWineCommand([installerPath, "/S"], in: workingPrefix)
+
+        await updateProgress(0.6, "Configuring Steam for gaming performance...")
+
+        // Apply gaming performance optimizations
+        try await configureGamingOptimizations(in: workingPrefix)
+
+        await updateProgress(0.8, "Installing gaming dependencies...")
+
+        // Install essential Windows gaming components
+        try await installGamingDependencies(in: workingPrefix)
+
+        await updateProgress(1.0, "Steam installation complete!")
+
+        // Clean up installer
+        try? fileManager.removeItem(atPath: installerPath)
+    }
+
+    func launchSteam(in prefixPath: String? = nil) async throws {
+        let workingPrefix = prefixPath ?? defaultPrefixPath
+        let steamPath = workingPrefix + "/drive_c/Program Files (x86)/Steam/steam.exe"
+
+        // Set Steam launch options for better performance
+        let steamArgs = [
+            steamPath,
+            "-no-browser",  // Disable in-game browser for performance
+            "-silent",  // Minimize startup notifications
+            "+open", "steam://open/minigameslist",  // Open to library directly
+        ]
+
+        _ = try await runWineCommand(steamArgs, in: workingPrefix)
+    }
+
+    func launchGame(
+        executablePath: String, in prefixPath: String? = nil, withArgs args: [String] = []
+    ) async throws {
+        let workingPrefix = prefixPath ?? defaultPrefixPath
+
+        // Apply runtime performance optimizations before launching game
+        try await applyRuntimeOptimizations(in: workingPrefix)
+
+        let gameArgs = [executablePath] + args
+        _ = try await runWineCommand(gameArgs, in: workingPrefix)
+    }
+
+    private func applyRuntimeOptimizations(in prefixPath: String) async throws {
+        // Set process priority for better gaming performance
+        let priorityCommands = [
+            // Set Wine process to high priority
+            [
+                "regedit", "/S", "/C",
+                "reg add \"HKLM\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Image File Execution Options\\wine-preloader\" /v \"PriorityClass\" /t REG_DWORD /d 3",
+            ],
+
+            // Disable Windows Defender (simulated)
+            [
+                "regedit", "/S", "/C",
+                "reg add \"HKLM\\Software\\Microsoft\\Windows Defender\" /v \"DisableAntiSpyware\" /t REG_DWORD /d 1",
+            ],
+
+            // Optimize graphics settings for performance
+            [
+                "regedit", "/S", "/C",
+                "reg add \"HKCU\\Software\\Wine\\Direct3D\" /v \"DirectDrawRenderer\" /t REG_SZ /d \"opengl\"",
+            ],
+
+            // Set game mode registry entries
+            [
+                "regedit", "/S", "/C",
+                "reg add \"HKCU\\Software\\Microsoft\\GameBar\" /v \"AllowAutoGameMode\" /t REG_DWORD /d 1",
+            ],
+        ]
+
+        for command in priorityCommands {
+            do {
+                _ = try await runWineCommand(command, in: prefixPath)
+            } catch {
+                // Continue even if optimization fails
+                print("Runtime optimization failed: \(command), error: \(error)")
+            }
+        }
+    }
+
+    // MARK: - Game Management
+
+    func scanForInstalledGames() async {
+        // Create a dummy default prefix for embedded Wine
+        let defaultPrefix = WinePrefix(name: "default", backend: .embedded)
+
+        // In a real implementation, this would scan common Steam and game directories
+        // For now, we'll add Steam if it's installed
+        let steamPath = defaultPrefixPath + "/drive_c/Program Files (x86)/Steam/steam.exe"
+
+        var games: [GameInstallation] = []
+
+        if fileManager.fileExists(atPath: steamPath) {
+            var steamGame = GameInstallation(
+                name: "Steam",
+                executablePath: steamPath,
+                winePrefix: defaultPrefix,
+                installPath: defaultPrefixPath + "/drive_c/Program Files (x86)/Steam"
+            )
+            steamGame.isInstalled = true
+            games.append(steamGame)
+        }
+
+        // Scan for other games in Steam directory
+        let steamAppsPath =
+            defaultPrefixPath + "/drive_c/Program Files (x86)/Steam/steamapps/common"
+        if fileManager.fileExists(atPath: steamAppsPath) {
+            do {
+                let gameDirectories = try fileManager.contentsOfDirectory(atPath: steamAppsPath)
+                for gameDir in gameDirectories {
+                    let gamePath = steamAppsPath + "/" + gameDir
+
+                    // Look for executable files
+                    if let executablePath = findExecutableInDirectory(gamePath) {
+                        var game = GameInstallation(
+                            name: gameDir,
+                            executablePath: executablePath,
+                            winePrefix: defaultPrefix,
+                            installPath: gamePath
+                        )
+                        game.isInstalled = true
+                        games.append(game)
+                    }
+                }
+            } catch {
+                print("Failed to scan Steam games: \(error)")
+            }
+        }
+
+        await MainActor.run {
+            installedGames = games
+        }
+    }
+
+    func launchGame(_ game: GameInstallation) async throws {
+        try await launchGame(executablePath: game.executablePath)
+
+        // Update last played time
+        if let index = installedGames.firstIndex(where: { $0.id == game.id }) {
+            var updatedGame = installedGames[index]
+            updatedGame.lastPlayed = Date()
+            installedGames[index] = updatedGame
+        }
+    }
+
+    private func findExecutableInDirectory(_ directory: String) -> String? {
+        do {
+            let contents = try fileManager.contentsOfDirectory(atPath: directory)
+
+            // Look for .exe files
+            for file in contents {
+                if file.lowercased().hasSuffix(".exe") {
+                    return directory + "/" + file
+                }
+            }
+
+            // Look in subdirectories
+            for item in contents {
+                let itemPath = directory + "/" + item
+                var isDirectory: ObjCBool = false
+                if fileManager.fileExists(atPath: itemPath, isDirectory: &isDirectory)
+                    && isDirectory.boolValue
+                {
+                    if let executablePath = findExecutableInDirectory(itemPath) {
+                        return executablePath
+                    }
+                }
+            }
+        } catch {
+            return nil
+        }
+
+        return nil
+    }
+
+    // MARK: - Helper Methods
+
+    private func createWineEnvironment(prefixPath: String) -> [String: String] {
+        var env = ProcessInfo.processInfo.environment
+
+        // Core Wine settings
+        env["WINEPREFIX"] = prefixPath
+        env["WINEDLLOVERRIDES"] = "mscoree,mshtml=;winemenubuilder.exe=d"
+
+        // Performance optimizations
+        env["WINE_CPU_TOPOLOGY"] = "4:2"  // Optimize for multi-core (4 cores, 2 threads per core)
+        env["WINE_LARGE_ADDRESS_AWARE"] = "1"  // Enable Large Address Aware for 32-bit games
+
+        // Graphics and gaming performance
+        env["DXVK_HUD"] = "fps"  // Show FPS overlay when using DXVK
+        env["WINE_DISABLE_MENU_BUILDER"] = "1"  // Disable menu integration for performance
+        env["WINE_DISABLE_REGISTRY_UPDATE"] = "1"  // Reduce registry overhead
+
+        // Audio optimizations
+        env["PULSE_LATENCY_MSEC"] = "60"  // Low audio latency
+        env["WINE_RT"] = "1"  // Real-time priority for audio
+
+        // Memory and threading optimizations
+        env["WINE_HEAP_MAX_SIZE"] = "1073741824"  // 1GB heap size
+        env["WINE_STAGING"] = "1"  // Enable staging patches for better compatibility
+
+        // DirectX and graphics optimizations
+        env["WINE_D3D11"] = "1"  // Enable Direct3D 11 support
+        env["WINE_OPENGL"] = "1"  // Enable OpenGL optimizations
+        env["MESA_GL_VERSION_OVERRIDE"] = "4.6"  // Override OpenGL version for compatibility
+
+        // Gaming-specific environment
+        env["WINE_GAMING_MODE"] = "1"
+        env["WINE_FULLSCREEN_FSR"] = "1"  // Enable FSR (FidelityFX Super Resolution) if available
+
+        return env
+    }
+
+    private func downloadFile(from urlString: String, to fileName: String) async throws -> String {
+        guard let url = URL(string: urlString) else {
+            throw WineError.invalidURL
+        }
+
+        let (data, _) = try await URLSession.shared.data(from: url)
+
+        let tempDir = NSTemporaryDirectory()
+        let filePath = tempDir + fileName
+
+        try data.write(to: URL(fileURLWithPath: filePath))
+        return filePath
+    }
+}

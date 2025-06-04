@@ -8,163 +8,411 @@
 import SwiftUI
 
 struct GamesLibraryView: View {
-    @EnvironmentObject var wineManager: WineManager
+    @EnvironmentObject var embeddedWineManager: EmbeddedWineManager
     @State private var searchText = ""
     @State private var selectedGame: GameInstallation?
     @State private var showingGameDetails = false
+    @State private var isRefreshing = false
+    @State private var animateHeader = false
+    @State private var animateCards = false
 
     var filteredGames: [GameInstallation] {
         if searchText.isEmpty {
-            return wineManager.gameInstallations
+            return embeddedWineManager.installedGames
         }
-        return wineManager.gameInstallations.filter { game in
+        return embeddedWineManager.installedGames.filter { game in
             game.name.localizedCaseInsensitiveContains(searchText)
         }
     }
 
     var body: some View {
-        NavigationView {
-            VStack {
-                if filteredGames.isEmpty {
-                    EmptyGamesView()
-                } else {
-                    GameGridView(games: filteredGames, selectedGame: $selectedGame)
-                }
+        ZStack {
+            // Background gradient
+            LinearGradient(
+                colors: [
+                    Color.blue.opacity(0.1),
+                    Color.purple.opacity(0.1),
+                    Color.clear,
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea(.all)
+
+            VStack(spacing: 0) {
+                // Header Section
+                headerSection
+
+                // Content Section
+                contentSection
             }
-            .navigationTitle("Game Library")
-            .searchable(text: $searchText, prompt: "Search games")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button("Refresh") {
-                        Task {
-                            await refreshGameLibrary()
-                        }
-                    }
-                }
-            }
+        }
+        .onAppear {
+            startAnimations()
         }
         .sheet(item: $selectedGame) { game in
             GameDetailsView(game: game)
         }
     }
 
+    // MARK: - Header Section
+    private var headerSection: some View {
+        VStack(spacing: 20) {
+            HStack {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Game Library")
+                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [.primary, .blue],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+
+                    Text("\(filteredGames.count) games available")
+                        .font(.system(size: 16, weight: .medium, design: .rounded))
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+
+                // Action buttons
+                HStack(spacing: 12) {
+                    Button(action: { Task { await openSteam() } }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "gamecontroller.fill")
+                                .font(.system(size: 14, weight: .semibold))
+                            Text("Steam")
+                                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(
+                            LinearGradient(
+                                colors: [Color.green, Color.green.opacity(0.8)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .foregroundColor(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .shadow(color: .green.opacity(0.3), radius: 8, x: 0, y: 4)
+                    }
+                    .buttonStyle(ScaleButtonStyle())
+
+                    Button(action: { Task { await refreshGameLibrary() } }) {
+                        HStack(spacing: 8) {
+                            Image(
+                                systemName: isRefreshing
+                                    ? "arrow.trianglehead.2.clockwise" : "arrow.clockwise"
+                            )
+                            .font(.system(size: 14, weight: .semibold))
+                            .rotationEffect(.degrees(isRefreshing ? 360 : 0))
+                            .animation(
+                                .linear(duration: 1).repeatForever(autoreverses: false),
+                                value: isRefreshing)
+                            Text("Refresh")
+                                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(
+                            LinearGradient(
+                                colors: [Color.blue, Color.blue.opacity(0.8)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .foregroundColor(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
+                    }
+                    .buttonStyle(ScaleButtonStyle())
+                    .disabled(isRefreshing)
+                }
+            }
+
+            // Search bar
+            HStack {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(.secondary)
+                    .font(.system(size: 16, weight: .medium))
+
+                TextField("Search your games...", text: $searchText)
+                    .font(.system(size: 16, weight: .medium, design: .rounded))
+                    .textFieldStyle(.plain)
+
+                if !searchText.isEmpty {
+                    Button(action: { searchText = "" }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.secondary)
+                            .font(.system(size: 16, weight: .medium))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+                    )
+            )
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 20)
+        .padding(.bottom, 10)
+        .opacity(animateHeader ? 1 : 0)
+        .offset(y: animateHeader ? 0 : -20)
+        .animation(.spring(response: 0.8, dampingFraction: 0.8).delay(0.1), value: animateHeader)
+    }
+
+    // MARK: - Content Section
+    private var contentSection: some View {
+        Group {
+            if filteredGames.isEmpty {
+                ModernEmptyGamesView()
+            } else {
+                ModernGameGridView(games: filteredGames, selectedGame: $selectedGame)
+            }
+        }
+        .opacity(animateCards ? 1 : 0)
+        .offset(y: animateCards ? 0 : 20)
+        .animation(.spring(response: 0.8, dampingFraction: 0.8).delay(0.3), value: animateCards)
+    }
+
+    // MARK: - Helper Methods
+    private func startAnimations() {
+        withAnimation {
+            animateHeader = true
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            withAnimation {
+                animateCards = true
+            }
+        }
+    }
+
     private func refreshGameLibrary() async {
-        // Scan Wine prefixes for installed games
-        // This could scan common installation directories
+        isRefreshing = true
+        await embeddedWineManager.scanForInstalledGames()
+        isRefreshing = false
+    }
+
+    private func openSteam() async {
+        do {
+            try await embeddedWineManager.launchSteam()
+        } catch {
+            print("Failed to launch Steam: \(error)")
+        }
     }
 }
 
-struct EmptyGamesView: View {
+// MARK: - Modern Components
+
+struct ModernEmptyGamesView: View {
     var body: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "gamecontroller.fill")
-                .font(.system(size: 60))
-                .foregroundColor(.secondary)
+        VStack(spacing: 30) {
+            // Icon with gradient background
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [.blue.opacity(0.2), .purple.opacity(0.2)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 120, height: 120)
 
-            Text("No Games Installed")
-                .font(.title2)
-                .fontWeight(.semibold)
+                Image(systemName: "gamecontroller.fill")
+                    .font(.system(size: 50, weight: .medium))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.blue, .purple],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
 
-            Text("Install Steam or other Windows games using the Install tab")
-                .font(.body)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
+            VStack(spacing: 12) {
+                Text("No Games Found")
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .foregroundColor(.primary)
+
+                Text("Install Steam to access your game library, or add games manually")
+                    .font(.system(size: 16, weight: .medium, design: .rounded))
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 40)
+            }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
     }
 }
 
-struct GameGridView: View {
+struct ModernGameGridView: View {
     let games: [GameInstallation]
     @Binding var selectedGame: GameInstallation?
 
     let columns = [
-        GridItem(.adaptive(minimum: 150))
+        GridItem(.adaptive(minimum: 180), spacing: 20)
     ]
 
     var body: some View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: 20) {
                 ForEach(games, id: \.id) { game in
-                    GameCard(game: game)
+                    ModernGameCard(game: game)
                         .onTapGesture {
                             selectedGame = game
                         }
                 }
             }
-            .padding()
+            .padding(24)
         }
     }
 }
 
-struct GameCard: View {
+struct ModernGameCard: View {
     let game: GameInstallation
-    @EnvironmentObject var wineManager: WineManager
+    @EnvironmentObject var embeddedWineManager: EmbeddedWineManager
     @State private var isLaunching = false
+    @State private var isHovered = false
 
     var body: some View {
-        VStack {
+        VStack(spacing: 16) {
             // Game Icon/Image
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.blue.gradient)
-                .frame(height: 120)
-                .overlay {
-                    if let iconData = game.icon, let uiImage = NSImage(data: iconData) {
-                        Image(nsImage: uiImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
+            ZStack {
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.blue.opacity(0.8),
+                                Color.purple.opacity(0.8),
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(height: 140)
+                    .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
+
+                if let iconData = game.icon, let uiImage = NSImage(data: iconData) {
+                    Image(nsImage: uiImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                } else {
+                    Image(systemName: "gamecontroller")
+                        .font(.system(size: 50, weight: .medium))
+                        .foregroundColor(.white)
+                }
+
+                // Play overlay on hover
+                if isHovered {
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(.ultraThinMaterial)
+                        .overlay {
+                            Button(action: { launchGame() }) {
+                                HStack(spacing: 8) {
+                                    if isLaunching {
+                                        ProgressView()
+                                            .scaleEffect(0.8)
+                                            .tint(.white)
+                                    } else {
+                                        Image(systemName: "play.fill")
+                                            .font(.system(size: 20, weight: .semibold))
+                                    }
+                                    Text(isLaunching ? "Launching..." : "Play")
+                                        .font(
+                                            .system(size: 14, weight: .semibold, design: .rounded))
+                                }
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 10)
+                                .background(
+                                    LinearGradient(
+                                        colors: [.green, .green.opacity(0.8)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .shadow(color: .green.opacity(0.3), radius: 8, x: 0, y: 4)
+                            }
+                            .buttonStyle(ScaleButtonStyle())
+                            .disabled(isLaunching || !game.isInstalled)
+                        }
+                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                }
+            }
+
+            // Game Info
+            VStack(alignment: .leading, spacing: 8) {
+                Text(game.name)
+                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+
+                HStack {
+                    Label("Embedded Wine", systemImage: "gear")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundColor(.secondary)
+
+                    Spacer()
+
+                    if game.isInstalled {
+                        Label("Ready", systemImage: "checkmark.circle.fill")
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundColor(.green)
                     } else {
-                        Image(systemName: "gamecontroller")
-                            .font(.system(size: 40))
-                            .foregroundColor(.white)
+                        Label("Not Installed", systemImage: "exclamationmark.circle.fill")
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundColor(.orange)
                     }
                 }
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(game.name)
-                    .font(.headline)
-                    .lineLimit(2)
-
-                Text(game.winePrefix.name)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-
                 if let lastPlayed = game.lastPlayed {
-                    Text("Last played: \(lastPlayed, style: .relative) ago")
-                        .font(.caption2)
+                    Text("Last played \(lastPlayed, style: .relative) ago")
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
                         .foregroundColor(.secondary)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            Button(action: {
-                launchGame()
-            }) {
-                HStack {
-                    if isLaunching {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                    } else {
-                        Image(systemName: "play.fill")
-                    }
-                    Text(isLaunching ? "Launching..." : "Play")
-                }
-                .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(isLaunching || !game.isInstalled)
         }
-        .padding()
-        .background(Color(.controlBackgroundColor))
-        .cornerRadius(12)
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+                )
+        )
+        .scaleEffect(isHovered ? 1.02 : 1.0)
+        .shadow(
+            color: .black.opacity(isHovered ? 0.15 : 0.05), radius: isHovered ? 15 : 5, x: 0,
+            y: isHovered ? 8 : 2
+        )
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isHovered)
+        .onHover { hovering in
+            isHovered = hovering
+        }
     }
 
     private func launchGame() {
         isLaunching = true
         Task {
             do {
-                try await wineManager.launchGame(game)
+                try await embeddedWineManager.launchGame(game)
             } catch {
                 print("Failed to launch game: \(error)")
             }
@@ -181,63 +429,114 @@ struct GameDetailsView: View {
 
     var body: some View {
         NavigationView {
-            VStack(alignment: .leading, spacing: 20) {
-                // Game header
-                HStack {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.blue.gradient)
-                        .frame(width: 80, height: 80)
-                        .overlay {
+            ZStack {
+                // Background gradient
+                LinearGradient(
+                    colors: [
+                        Color.blue.opacity(0.1),
+                        Color.purple.opacity(0.1),
+                        Color.clear,
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea(.all)
+
+                VStack(alignment: .leading, spacing: 24) {
+                    // Game header
+                    HStack(spacing: 20) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            Color.blue.opacity(0.8), Color.purple.opacity(0.8),
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .frame(width: 100, height: 100)
+                                .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
+
                             if let iconData = game.icon, let uiImage = NSImage(data: iconData) {
                                 Image(nsImage: uiImage)
                                     .resizable()
                                     .aspectRatio(contentMode: .fit)
+                                    .frame(width: 100, height: 100)
+                                    .clipShape(RoundedRectangle(cornerRadius: 16))
                             } else {
                                 Image(systemName: "gamecontroller")
-                                    .font(.system(size: 30))
+                                    .font(.system(size: 40, weight: .medium))
                                     .foregroundColor(.white)
                             }
                         }
 
-                    VStack(alignment: .leading) {
-                        Text(game.name)
-                            .font(.title2)
-                            .fontWeight(.bold)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(game.name)
+                                .font(.system(size: 28, weight: .bold, design: .rounded))
+                                .foregroundStyle(
+                                    LinearGradient(
+                                        colors: [.primary, .blue],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
 
-                        Text("Wine Prefix: \(game.winePrefix.name)")
-                            .foregroundColor(.secondary)
+                            Label("Embedded Wine Environment", systemImage: "gear")
+                                .font(.system(size: 16, weight: .medium, design: .rounded))
+                                .foregroundColor(.secondary)
 
-                        Text("Backend: \(game.winePrefix.backend.displayName)")
-                            .foregroundColor(.secondary)
+                            Label("Ready to Play", systemImage: "checkmark.circle.fill")
+                                .font(.system(size: 14, weight: .medium, design: .rounded))
+                                .foregroundColor(.green)
+                        }
+
+                        Spacer()
+                    }
+
+                    // Game info
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Game Information")
+                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                            .foregroundColor(.primary)
+
+                        VStack(spacing: 12) {
+                            InfoRow(label: "Installation Path", value: game.installPath)
+                            InfoRow(label: "Executable", value: game.executablePath)
+                            if let lastPlayed = game.lastPlayed {
+                                InfoRow(
+                                    label: "Last Played",
+                                    value: DateFormatter.localizedString(
+                                        from: lastPlayed, dateStyle: .medium, timeStyle: .short))
+                            }
+                            InfoRow(label: "Play Time", value: formatPlayTime(game.playTime))
+                        }
+                        .padding(20)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(.ultraThinMaterial)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+                                )
+                        )
                     }
 
                     Spacer()
                 }
-
-                // Game info
-                GroupBox("Game Information") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        InfoRow(label: "Installation Path", value: game.installPath)
-                        InfoRow(label: "Executable", value: game.executablePath)
-                        if let lastPlayed = game.lastPlayed {
-                            InfoRow(
-                                label: "Last Played",
-                                value: DateFormatter.localizedString(
-                                    from: lastPlayed, dateStyle: .medium, timeStyle: .short))
-                        }
-                        InfoRow(label: "Play Time", value: formatPlayTime(game.playTime))
-                    }
-                }
-
-                Spacer()
+                .padding(24)
             }
-            .padding()
             .navigationTitle("Game Details")
+            #if os(iOS)
+                .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") {
                         dismiss()
                     }
+                    .buttonStyle(.borderedProminent)
                 }
             }
         }
@@ -250,23 +549,16 @@ struct GameDetailsView: View {
     }
 }
 
-struct InfoRow: View {
-    let label: String
-    let value: String
-
-    var body: some View {
-        HStack {
-            Text(label)
-                .fontWeight(.medium)
-            Spacer()
-            Text(value)
-                .foregroundColor(.secondary)
-                .textSelection(.enabled)
-        }
+// MARK: - Button Style
+struct ScaleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
     }
 }
 
 #Preview {
     GamesLibraryView()
-        .environmentObject(WineManager())
+        .environmentObject(EmbeddedWineManager())
 }

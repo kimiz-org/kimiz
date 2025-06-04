@@ -15,7 +15,6 @@ class WineManager: ObservableObject {
     @Published var availableBackends: [WineBackend] = []
     @Published var isLoading = false
     @Published var lastError: String?
-    @Published var embeddedWineManager = EmbeddedWineManager()
 
     private let fileManager = FileManager.default
     private var cancellables = Set<AnyCancellable>()
@@ -228,22 +227,5 @@ class WineManager: ObservableObject {
     private func saveGameInstallations() {
         // Save to UserDefaults or Core Data
         // Implementation would depend on chosen persistence method
-    }
-}
-
-enum WineError: LocalizedError {
-    case prefixCreationFailed(String)
-    case executionFailed(String)
-    case installationFailed(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .prefixCreationFailed(let message):
-            return "Wine Prefix Creation Failed: \(message)"
-        case .executionFailed(let message):
-            return "Execution Failed: \(message)"
-        case .installationFailed(let message):
-            return "Installation Failed: \(message)"
-        }
     }
 }
