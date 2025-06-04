@@ -20,51 +20,47 @@ struct SettingsView: View {
             Form {
                 // Wine Status Section
                 Section("Wine Environment") {
-                    HStack {
-                        Image(
-                            systemName: embeddedWineManager.isWineReady
-                                ? "checkmark.circle.fill" : "xmark.circle.fill"
-                        )
-                        .foregroundColor(embeddedWineManager.isWineReady ? .green : .red)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Wine Status")
-                                .font(.headline)
-                            Text(embeddedWineManager.isWineReady ? "Ready" : "Not Available")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-
-                        Spacer()
-
-                        if !embeddedWineManager.isWineReady {
-                            Button("Setup") {
-                                Task {
-                                    await embeddedWineManager.checkWineInstallation()
-                                }
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.small)
-                        }
-                    }
-
-                    if let error = embeddedWineManager.lastError {
-                        Text(error)
-                            .font(.caption)
-                            .foregroundColor(.red)
-                    }
+                    WineStatusView()
+                        .environmentObject(embeddedWineManager)
+                        .padding(.vertical, 8)
+                        .listRowInsets(EdgeInsets())
                 }
 
                 // Game Settings Section
                 Section("Game Settings") {
                     Toggle("Auto-detect installed games", isOn: $autoDetectGames)
                     Toggle("Show performance overlay", isOn: $enableHUD)
+
+                    Button("Scan for Installed Games") {
+                        Task {
+                            await embeddedWineManager.scanForInstalledGames()
+                        }
+                    }
+                    .disabled(!embeddedWineManager.isWineReady)
                 }
 
                 // Performance Settings Section
                 Section("Performance") {
                     Toggle("Enable Esync", isOn: $useEsync)
+                        .help("Improves Wine performance by using eventfd-based synchronization")
+
                     Toggle("DXVK Async", isOn: $useDXVKAsync)
+                        .help("Enables asynchronous shader compilation for smoother gameplay")
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Performance Tips:")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+
+                        Text("• Enable Esync for better CPU utilization")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+
+                        Text("• DXVK Async can reduce stuttering but may cause graphical issues")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.top, 8)
                 }
 
                 // Advanced Settings Section

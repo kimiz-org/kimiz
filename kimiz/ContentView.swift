@@ -15,7 +15,7 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if hasCompletedOnboarding && embeddedWineManager.isWineReady {
+            if hasCompletedOnboarding {
                 mainInterface
             } else {
                 OnboardingView(showOnboarding: $showOnboarding)
@@ -25,6 +25,11 @@ struct ContentView: View {
         .onAppear {
             if !hasCompletedOnboarding {
                 showOnboarding = true
+            } else if !embeddedWineManager.hasCheckedWineStatus {
+                // Check Wine status on app launch if onboarding is complete
+                Task {
+                    await embeddedWineManager.checkWineInstallation()
+                }
             }
         }
         .onChange(of: showOnboarding) { _, newValue in
@@ -42,23 +47,24 @@ struct ContentView: View {
                     Text("Games")
                 }
                 .tag(0)
+                .environmentObject(embeddedWineManager)
 
-            // Simplified - remove Wine Prefixes tab since we're using embedded Wine
             InstallationView()
                 .tabItem {
                     Image(systemName: "plus.circle")
                     Text("Install")
                 }
                 .tag(1)
+                .environmentObject(embeddedWineManager)
 
             SettingsView()
                 .tabItem {
                     Image(systemName: "gear")
                     Text("Settings")
                 }
-                .tag(2)
+                .tag(3)
+                .environmentObject(embeddedWineManager)
         }
-        .environmentObject(embeddedWineManager)
     }
 }
 

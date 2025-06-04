@@ -7,6 +7,36 @@
 
 import Foundation
 
+// MARK: - Temporary Types for Compilation
+// These types are defined here to ensure proper compilation
+// The real definitions are in WineEnvironment.swift
+
+// Temporarily redefine these types if they can't be found
+#if !IMPORTED_WINE_TYPES
+    private enum WineBackendTemp: String {
+        case embedded, wine, crossover, gamePortingToolkit
+
+        var executablePath: String {
+            switch self {
+            case .gamePortingToolkit:
+                return "/usr/local/bin/wine64"
+            default:
+                return "/usr/local/bin/wine64"
+            }
+        }
+    }
+
+    private struct WinePrefixTemp {
+        let path: String
+        let backend: WineBackendTemp
+    }
+
+    private enum WineErrorTemp: Error {
+        case installationFailed(String)
+    }
+#endif
+
+// Main class implementation
 class GamePortingToolkitManager {
     static let shared = GamePortingToolkitManager()
 
@@ -52,13 +82,24 @@ class GamePortingToolkitManager {
 
     // MARK: - GPTK Optimization
 
-    func getOptimizedEnvironment(for prefix: WinePrefix) -> [String: String] {
+    func getOptimizedEnvironment(for prefix: Any) -> [String: String] {
+        // Use type casting to work with the right WinePrefix type
+        #if IMPORTED_WINE_TYPES
+            let winePrefix = prefix as! WinePrefix
+            let useGPTK = winePrefix.backend == .gamePortingToolkit
+            let prefixPath = winePrefix.path
+        #else
+            let winePrefix = prefix as! WinePrefixTemp
+            let useGPTK = winePrefix.backend == .gamePortingToolkit
+            let prefixPath = winePrefix.path
+        #endif
+
         var environment: [String: String] = [
-            "WINEPREFIX": prefix.path,
+            "WINEPREFIX": prefixPath,
             "WINEDEBUG": "-all",
         ]
 
-        if prefix.backend == .gamePortingToolkit {
+        if useGPTK {
             // Game Porting Toolkit specific optimizations
             environment["MTL_HUD_ENABLED"] = "1"
             environment["WINEESYNC"] = "1"
@@ -196,7 +237,11 @@ class GamePortingToolkitManager {
         task.waitUntilExit()
 
         if task.terminationStatus != 0 {
-            throw WineError.installationFailed("Game Porting Toolkit installation failed")
+            #if IMPORTED_WINE_TYPES
+                throw WineError.installationFailed("Game Porting Toolkit installation failed")
+            #else
+                throw WineErrorTemp.installationFailed("Game Porting Toolkit installation failed")
+            #endif
         }
 
         // Clean up
@@ -205,7 +250,18 @@ class GamePortingToolkitManager {
 
     // MARK: - Registry Modifications
 
-    func applyRegistryOptimizations(to prefix: WinePrefix) async throws {
+    func applyRegistryOptimizations(to prefix: Any) async throws {
+        // Use type casting to work with the right WinePrefix type
+        #if IMPORTED_WINE_TYPES
+            let winePrefix = prefix as! WinePrefix
+            let execPath = winePrefix.backend.executablePath
+            let prefixPath = winePrefix.path
+        #else
+            let winePrefix = prefix as! WinePrefixTemp
+            let execPath = winePrefix.backend.executablePath
+            let prefixPath = winePrefix.path
+        #endif
+
         let registryScript = """
             REGEDIT4
 
@@ -235,9 +291,9 @@ class GamePortingToolkitManager {
 
         // Apply registry modifications
         let task = Process()
-        task.executableURL = URL(fileURLWithPath: prefix.backend.executablePath)
+        task.executableURL = URL(fileURLWithPath: execPath)
         task.arguments = ["regedit", tempURL.path]
-        task.environment = ["WINEPREFIX": prefix.path]
+        task.environment = ["WINEPREFIX": prefixPath]
 
         try task.run()
         task.waitUntilExit()

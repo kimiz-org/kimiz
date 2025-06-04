@@ -9,13 +9,124 @@ import SwiftUI
 
 struct WinePrefixesView: View {
     @EnvironmentObject var wineManager: WineManager
+    @EnvironmentObject var embeddedWineManager: EmbeddedWineManager
     @State private var showingCreatePrefix = false
     @State private var selectedPrefix: WinePrefix?
+    @State private var showingWineStatus = false
 
     var body: some View {
         NavigationView {
-            List {
-                ForEach(wineManager.winePrefixes, id: \.id) { prefix in
+            VStack {
+                if !embeddedWineManager.isWineReady {
+                    wineStatusBanner
+                }
+
+                List {
+                    defaultPrefixSection
+
+                    customPrefixesSection
+                }
+            }
+            .navigationTitle("Wine Prefixes")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        Button("Create New Prefix") {
+                            showingCreatePrefix = true
+                        }
+                        .disabled(!embeddedWineManager.isWineReady)
+
+                        Divider()
+
+                        Button("Check Wine Status") {
+                            showingWineStatus = true
+                        }
+                    } label: {
+                        Label("Add", systemImage: "plus")
+                    }
+                }
+            }
+            .sheet(isPresented: $showingCreatePrefix) {
+                CreateWinePrefixView()
+            }
+            .sheet(item: $selectedPrefix) { prefix in
+                WinePrefixDetailsView(prefix: prefix)
+            }
+            .sheet(isPresented: $showingWineStatus) {
+                VStack {
+                    Text("Wine Runtime Status")
+                        .font(.title2)
+                        .padding(.top)
+
+                    WineStatusView()
+                        .padding()
+
+                    Button("Close") {
+                        showingWineStatus = false
+                    }
+                    .padding(.bottom)
+                }
+                .frame(width: 500, height: 400)
+            }
+        }
+    }
+
+    private var wineStatusBanner: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.white)
+
+            Text("Wine runtime is required to create prefixes")
+                .foregroundColor(.white)
+                .font(.callout)
+
+            Spacer()
+
+            Button("Install Now") {
+                showingWineStatus = true
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .tint(.white.opacity(0.3))
+            .foregroundColor(.white)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color.orange.opacity(0.8))
+    }
+
+    private var defaultPrefixSection: some View {
+        Section("Default Prefix") {
+            if let defaultPrefix = wineManager.winePrefixes.first(where: { $0.isDefault }) {
+                WinePrefixRow(prefix: defaultPrefix)
+                    .onTapGesture {
+                        selectedPrefix = defaultPrefix
+                    }
+                    .contextMenu {
+                        Button("Open in Finder") {
+                            NSWorkspace.shared.open(URL(fileURLWithPath: defaultPrefix.path))
+                        }
+                    }
+            } else {
+                InfoRow(
+                    icon: "folder.badge.plus",
+                    title: "No Default Prefix",
+                    subtitle: "Create a default prefix to get started",
+                    action: {
+                        showingCreatePrefix = true
+                    },
+                    actionTitle: "Create"
+                )
+                .disabled(!embeddedWineManager.isWineReady)
+            }
+        }
+    }
+
+    private var customPrefixesSection: some View {
+        Section("Custom Prefixes") {
+            let customPrefixes = wineManager.winePrefixes.filter({ !$0.isDefault })
+            if !customPrefixes.isEmpty {
+                ForEach(customPrefixes, id: \.id) { prefix in
                     WinePrefixRow(prefix: prefix)
                         .onTapGesture {
                             selectedPrefix = prefix
@@ -30,20 +141,17 @@ struct WinePrefixesView: View {
                             }
                         }
                 }
-            }
-            .navigationTitle("Wine Prefixes")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button("Create Prefix") {
+            } else {
+                InfoRow(
+                    icon: "folder.badge.questionmark",
+                    title: "No Custom Prefixes",
+                    subtitle: "Create custom prefixes for different configurations",
+                    action: {
                         showingCreatePrefix = true
-                    }
-                }
-            }
-            .sheet(isPresented: $showingCreatePrefix) {
-                CreateWinePrefixView()
-            }
-            .sheet(item: $selectedPrefix) { prefix in
-                WinePrefixDetailsView(prefix: prefix)
+                    },
+                    actionTitle: "Create"
+                )
+                .disabled(!embeddedWineManager.isWineReady)
             }
         }
     }
@@ -203,16 +311,17 @@ struct WinePrefixDetailsView: View {
                 // Prefix info
                 GroupBox("Prefix Information") {
                     VStack(alignment: .leading, spacing: 8) {
-                        InfoRow(label: "Name", value: prefix.name)
-                        InfoRow(label: "Backend", value: prefix.backend.displayName)
-                        InfoRow(label: "Windows Version", value: prefix.windowsVersion.uppercased())
-                        InfoRow(label: "Architecture", value: prefix.architecture)
-                        InfoRow(label: "Path", value: prefix.path)
-                        InfoRow(
+                        InfoRowKeyValue(label: "Name", value: prefix.name)
+                        InfoRowKeyValue(label: "Backend", value: prefix.backend.displayName)
+                        InfoRowKeyValue(
+                            label: "Windows Version", value: prefix.windowsVersion.uppercased())
+                        InfoRowKeyValue(label: "Architecture", value: prefix.architecture)
+                        InfoRowKeyValue(label: "Path", value: prefix.path)
+                        InfoRowKeyValue(
                             label: "Created",
                             value: DateFormatter.localizedString(
                                 from: prefix.createdDate, dateStyle: .medium, timeStyle: .short))
-                        InfoRow(
+                        InfoRowKeyValue(
                             label: "Last Used",
                             value: DateFormatter.localizedString(
                                 from: prefix.lastUsed, dateStyle: .medium, timeStyle: .short))
@@ -300,7 +409,67 @@ struct WinePrefixDetailsView: View {
     }
 }
 
+// MARK: - Helper Views
+struct InfoRow: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+    let action: () -> Void
+    let actionTitle: String
+
+    var body: some View {
+        HStack {
+            Image(systemName: icon)
+                .font(.system(size: 18))
+                .foregroundColor(.accentColor)
+                .frame(width: 32, height: 32)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.headline)
+
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Spacer()
+
+            Button(actionTitle) {
+                action()
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+        }
+        .padding(.vertical, 8)
+    }
+}
+
+// Original InfoRow for displaying key-value pairs
+struct InfoRowKeyValue: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        HStack {
+            Text(label)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.secondary)
+
+            Spacer()
+
+            Text(value)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.primary)
+                .multilineTextAlignment(.trailing)
+                .textSelection(.enabled)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
 #Preview {
     WinePrefixesView()
         .environmentObject(WineManager())
+        .environmentObject(EmbeddedWineManager())
 }

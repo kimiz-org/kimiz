@@ -9,14 +9,10 @@ import SwiftUI
 
 @main
 struct kimizApp: App {
-    @StateObject private var wineManager = WineManager()
-    @StateObject private var embeddedWineManager = EmbeddedWineManager()
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environmentObject(wineManager)
-                .environmentObject(embeddedWineManager)
+
         }
     }
 }

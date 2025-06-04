@@ -97,6 +97,23 @@ struct OnboardingView: View {
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
                     }
+                } else if embeddedWineManager.isInstallingComponents {
+                    VStack(spacing: 16) {
+                        ProgressView(value: embeddedWineManager.initializationProgress)
+                            .progressViewStyle(LinearProgressViewStyle())
+                            .frame(maxWidth: 300)
+
+                        Text("Installing \(embeddedWineManager.installationComponentName)...")
+                            .font(.system(size: 14))
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+
+                        Text("This may take several minutes. Do not close the application.")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.top, 4)
+                    }
                 } else if embeddedWineManager.isWineReady {
                     HStack(spacing: 8) {
                         Image(systemName: "checkmark.circle.fill")
@@ -116,22 +133,41 @@ struct OnboardingView: View {
                         }
 
                         Text(
-                            "Wine is not installed. Please install Game Porting Toolkit or Wine via Homebrew first."
+                            "Wine is not installed. Would you like to automatically install Game Porting Toolkit?"
                         )
                         .font(.system(size: 14))
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 32)
 
-                        Button("Install Instructions") {
-                            if let url = URL(
-                                string:
-                                    "https://developer.apple.com/documentation/gameportingtoolkit")
-                            {
-                                NSWorkspace.shared.open(url)
+                        VStack(spacing: 12) {
+                            Button("Install Automatically") {
+                                Task {
+                                    try? await embeddedWineManager.installRequiredComponents()
+                                }
                             }
+                            .buttonStyle(.borderedProminent)
+
+                            Text(
+                                "This will check for and install only the components that aren't already present"
+                            )
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: 320)
+                            .padding(.bottom, 4)
+
+                            Button("Manual Installation Instructions") {
+                                if let url = URL(
+                                    string:
+                                        "https://developer.apple.com/documentation/gameportingtoolkit"
+                                ) {
+                                    NSWorkspace.shared.open(url)
+                                }
+                            }
+                            .buttonStyle(.bordered)
                         }
-                        .buttonStyle(.bordered)
+                        .padding(.top, 4)
                     }
                 } else {
                     Button("Check Wine Installation") {
@@ -154,30 +190,81 @@ struct OnboardingView: View {
                 .foregroundColor(.accentColor)
 
             VStack(spacing: 12) {
-                Text("Install Steam")
+                Text("Install Steam for Windows")
                     .font(.system(size: 24, weight: .medium))
 
                 Text(
-                    "Would you like to install Steam for Windows?\nThis will give you access to your game library."
+                    "Would you like to install Steam for Windows?\nThis will give you access to your Windows game library on Mac."
                 )
                 .font(.system(size: 16))
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
 
-                HStack(spacing: 16) {
-                    Button("Skip") {
-                        completeOnboarding()
-                    }
-                    .buttonStyle(.bordered)
+                if isSettingUpWine {
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                            .padding(.bottom, 4)
 
-                    Button("Install Steam") {
-                        installSteam()
+                        Text("Downloading and installing Steam...")
+                            .font(.system(size: 14))
+                            .foregroundColor(.secondary)
+
+                        Text("This may take a few minutes")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary.opacity(0.8))
                     }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(isSettingUpWine)
+                    .padding(.vertical, 12)
+                } else {
+                    VStack(spacing: 6) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "info.circle")
+                                .foregroundColor(.blue)
+                                .font(.system(size: 14))
+
+                            Text("Steam will allow you to:")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.primary)
+                        }
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(alignment: .top, spacing: 6) {
+                                Text("•")
+                                Text("Access your existing Windows game library")
+                            }
+
+                            HStack(alignment: .top, spacing: 6) {
+                                Text("•")
+                                Text("Install and play Windows-only games")
+                            }
+
+                            HStack(alignment: .top, spacing: 6) {
+                                Text("•")
+                                Text("Purchase new Windows games")
+                            }
+                        }
+                        .font(.system(size: 13))
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 12)
+                        .padding(.top, 2)
+                    }
+                    .padding(.top, 6)
+
+                    HStack(spacing: 16) {
+                        Button("Skip") {
+                            completeOnboarding()
+                        }
+                        .buttonStyle(.bordered)
+
+                        Button("Install Steam") {
+                            installSteam()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(isSettingUpWine)
+                    }
+                    .padding(.top, 12)
                 }
-                .padding(.top, 8)
             }
         }
         .frame(maxWidth: 400)
