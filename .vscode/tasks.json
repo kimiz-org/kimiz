@@ -1,0 +1,13 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "command": "xcodebuild -project kimiz.xcodeproj -scheme kimiz build",
+      "group": "build",
+      "isBackground": false,
+      "label": "Build kimiz",
+      "problemMatcher": ["$gcc"],
+      "type": "shell"
+    }
+  ]
+}
