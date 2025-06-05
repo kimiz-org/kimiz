@@ -71,26 +71,28 @@ class GamePortingToolkitManager: ObservableObject {
             "/usr/local/bin/wine64",
             "/opt/homebrew/bin/wine64",
             "/usr/local/lib/wine",
-            "/opt/homebrew/lib/wine"
+            "/opt/homebrew/lib/wine",
         ]
-        
+
         // Also check for the actual GPTK directories
         let gptkPaths = [
             "/usr/local/share/game-porting-toolkit",
-            "/opt/homebrew/share/game-porting-toolkit"
+            "/opt/homebrew/share/game-porting-toolkit",
         ]
-        
+
         // Check if at least one wine64 binary exists and one GPTK directory exists
         let hasWine = commonPaths.prefix(2).contains { path in
             FileManager.default.fileExists(atPath: path)
         }
-        
-        let hasGPTK = gptkPaths.contains { path in
-            FileManager.default.fileExists(atPath: path)
-        } || commonPaths.suffix(2).contains { path in
-            FileManager.default.fileExists(atPath: path)
-        }
-        
+
+        let hasGPTK =
+            gptkPaths.contains { path in
+                FileManager.default.fileExists(atPath: path)
+            }
+            || commonPaths.suffix(2).contains { path in
+                FileManager.default.fileExists(atPath: path)
+            }
+
         return hasWine && hasGPTK
     }
 
@@ -100,10 +102,11 @@ class GamePortingToolkitManager: ObservableObject {
         // Try different wine64 paths
         let winePaths = [
             "/opt/homebrew/bin/wine64",
-            "/usr/local/bin/wine64"
+            "/usr/local/bin/wine64",
         ]
-        
-        guard let winePath = winePaths.first(where: { FileManager.default.fileExists(atPath: $0) }) else {
+
+        guard let winePath = winePaths.first(where: { FileManager.default.fileExists(atPath: $0) })
+        else {
             return nil
         }
 
@@ -176,10 +179,14 @@ class GamePortingToolkitManager: ObservableObject {
     }
 
     func runGame(executablePath: String) async throws {
-        guard let winePath = ["/opt/homebrew/bin/wine64", "/usr/local/bin/wine64"].first(where: { FileManager.default.fileExists(atPath: $0) }) else {
+        guard
+            let winePath = ["/opt/homebrew/bin/wine64", "/usr/local/bin/wine64"].first(where: {
+                FileManager.default.fileExists(atPath: $0)
+            })
+        else {
             throw GPTKError.notInstalled
         }
-        
+
         let environment = getOptimizedEnvironment()
 
         let task = Process()
@@ -227,21 +234,21 @@ class GamePortingToolkitManager: ObservableObject {
     private func isHomebrewInstalled() -> Bool {
         let homebrewPaths = [
             "/opt/homebrew/bin/brew",  // Apple Silicon
-            "/usr/local/bin/brew"      // Intel
+            "/usr/local/bin/brew",  // Intel
         ]
-        
+
         return homebrewPaths.contains { path in
             FileManager.default.fileExists(atPath: path)
         }
     }
-    
+
     /// Get the correct brew path for the system
     private func getBrewPath() -> String? {
         let homebrewPaths = [
             "/opt/homebrew/bin/brew",  // Apple Silicon
-            "/usr/local/bin/brew"      // Intel
+            "/usr/local/bin/brew",  // Intel
         ]
-        
+
         return homebrewPaths.first { path in
             FileManager.default.fileExists(atPath: path)
         }
@@ -260,9 +267,10 @@ class GamePortingToolkitManager: ObservableObject {
         }
 
         // Check if we're on Apple Silicon and need Rosetta 2
-        let isAppleSilicon = ProcessInfo.processInfo.environment["BREW_PREFIX"] == "/opt/homebrew" || 
-                           FileManager.default.fileExists(atPath: "/opt/homebrew/bin/brew")
-        
+        let isAppleSilicon =
+            ProcessInfo.processInfo.environment["BREW_PREFIX"] == "/opt/homebrew"
+            || FileManager.default.fileExists(atPath: "/opt/homebrew/bin/brew")
+
         if isAppleSilicon {
             await MainActor.run {
                 installationProgress = 0.3
@@ -293,13 +301,16 @@ class GamePortingToolkitManager: ObservableObject {
 
         await MainActor.run {
             installationProgress = 0.6
-            installationStatus = "Installing Game Porting Toolkit (this may take several minutes)..."
+            installationStatus =
+                "Installing Game Porting Toolkit (this may take several minutes)..."
         }
 
         let process = Process()
         if isAppleSilicon {
             process.executableURL = URL(fileURLWithPath: "/usr/bin/arch")
-            process.arguments = ["-x86_64", brewPath, "install", "apple/apple/game-porting-toolkit"]
+            process.arguments = [
+                "-x86_64", brewPath, "install", "apple/apple/game-porting-toolkit",
+            ]
         } else {
             process.executableURL = URL(fileURLWithPath: brewPath)
             process.arguments = ["install", "apple/apple/game-porting-toolkit"]
@@ -310,9 +321,10 @@ class GamePortingToolkitManager: ObservableObject {
                 if process.terminationStatus == 0 {
                     continuation.resume()
                 } else {
-                    let errorMessage = isAppleSilicon ? 
-                        "Failed to install Game Porting Toolkit. Make sure Rosetta 2 is installed: 'softwareupdate --install-rosetta'" :
-                        "Failed to install Game Porting Toolkit"
+                    let errorMessage =
+                        isAppleSilicon
+                        ? "Failed to install Game Porting Toolkit. Make sure Rosetta 2 is installed: 'softwareupdate --install-rosetta'"
+                        : "Failed to install Game Porting Toolkit"
                     continuation.resume(
                         throwing: GPTKError.installationFailed(errorMessage))
                 }
@@ -353,8 +365,12 @@ class GamePortingToolkitManager: ObservableObject {
 
         // Run Steam installer
         let environment = getOptimizedEnvironment()
-        
-        guard let winePath = ["/opt/homebrew/bin/wine64", "/usr/local/bin/wine64"].first(where: { FileManager.default.fileExists(atPath: $0) }) else {
+
+        guard
+            let winePath = ["/opt/homebrew/bin/wine64", "/usr/local/bin/wine64"].first(where: {
+                FileManager.default.fileExists(atPath: $0)
+            })
+        else {
             throw GPTKError.notInstalled
         }
 
@@ -400,9 +416,11 @@ enum GPTKError: LocalizedError {
         case .installationFailed(let message):
             return "Installation failed: \(message)"
         case .homebrewRequired:
-            return "Homebrew is required to install Game Porting Toolkit. Please install Homebrew first."
+            return
+                "Homebrew is required to install Game Porting Toolkit. Please install Homebrew first."
         case .rosettaRequired:
-            return "Rosetta 2 is required on Apple Silicon Macs. Please install it by running: softwareupdate --install-rosetta"
+            return
+                "Rosetta 2 is required on Apple Silicon Macs. Please install it by running: softwareupdate --install-rosetta"
         }
     }
 }
