@@ -5,11 +5,9 @@
 //  Created by Ahmet Affan Ebcioğlu on 4.06.2025.
 //
 
+import AppKit
 import Foundation
 import SwiftUI
-
-// Import Game model for type resolution
-// If this fails, ensure Game.swift is in the same target as this file
 
 // MARK: - Game Porting Toolkit Manager
 
@@ -135,10 +133,7 @@ class GamePortingToolkitManager: ObservableObject {
         }
     }
 
-    @Published var lastLaunchedGame: Game? = nil
-
     func launchGame(_ game: Game) async throws {
-        lastLaunchedGame = game
         guard isGPTKInstalled else {
             throw GPTKError.notInstalled
         }
@@ -158,6 +153,9 @@ class GamePortingToolkitManager: ObservableObject {
     }
 
     func runGame(executablePath: String) async throws {
+        // Get the game's install directory for the working directory
+        let gameDirectory = (executablePath as NSString).deletingLastPathComponent
+
         // Expanded list of possible Wine locations on macOS
         let possibleWinePaths = [
             // Homebrew (Apple Silicon)
@@ -204,47 +202,14 @@ class GamePortingToolkitManager: ObservableObject {
         print("[kimiz] Launching: \(executablePath)")
 
         let environment = getOptimizedEnvironment()
-        // Use the new async/await WineManager logic
+        // Use the new async/await WineManager logic with working directory support
         try await WineManager.shared.runWineProcess(
             winePath: winePath,
             executablePath: executablePath,
             environment: environment,
+            workingDirectory: gameDirectory,
             defaultBottlePath: defaultBottlePath
-        ) { [weak self] component in
-            Task { @MainActor in
-                self?.showMissingComponentAlert(component: component)
-            }
-        }
-    }
-
-    // Show popup to install missing component
-    @MainActor
-    private func showMissingComponentAlert(component: String) {
-        let alert = NSAlert()
-        alert.messageText = "Missing Component Detected"
-        alert.informativeText =
-            "Wine reported a missing component: \(component). Would you like to install it to the current bottle?"
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Install Needed Component")
-        alert.addButton(withTitle: "Cancel")
-        let response = alert.runModal()
-        if response == .alertFirstButtonReturn, let bottle = selectedBottle ?? bottles.first {
-            Task {
-                do {
-                    try await installDependency(component, for: bottle)
-                    // After successful install, retry launching the last game if available
-                    if let game = self.lastLaunchedGame {
-                        try? await self.launchGame(game)
-                    }
-                } catch {
-                    let failAlert = NSAlert()
-                    failAlert.messageText = "Failed to Install Component"
-                    failAlert.informativeText = error.localizedDescription
-                    failAlert.alertStyle = .critical
-                    failAlert.runModal()
-                }
-            }
-        }
+        )
     }
 
     // MARK: - GPTK Optimization
@@ -418,7 +383,7 @@ class GamePortingToolkitManager: ObservableObject {
             installationStatus = "Installing required dependencies..."
         }
 
-        // Install dependencies without Rosetta 2 or GPTK
+        // Install dependencies without Rosetta 2 or GPTK, but include winetricks
         let process = Process()
         process.executableURL = URL(fileURLWithPath: brewPath)
         process.arguments = [
@@ -435,9 +400,10 @@ class GamePortingToolkitManager: ObservableObject {
             "faudio",
             "cmake",
             "ninja",
+            "winetricks",  // Essential for component installation
         ]
 
-        return try await withCheckedThrowingContinuation { continuation in
+        try await withCheckedThrowingContinuation { continuation in
             process.terminationHandler = { process in
                 if process.terminationStatus == 0 {
                     continuation.resume()
@@ -486,28 +452,31 @@ class GamePortingToolkitManager: ObservableObject {
             initializationStatus = "Installing Steam..."
         }
 
-        // Run Steam installer
+        // Run Steam installer using WineManager
         let environment = getOptimizedEnvironment()
 
         guard
-            let winePath = ["/opt/homebrew/bin/wine64", "/usr/local/bin/wine64"].first(where: {
+            let winePath = [
+                "/opt/homebrew/bin/wine64",
+                "/usr/local/bin/wine64",
+                "/opt/homebrew/bin/wine",
+                "/usr/local/bin/wine",
+            ].first(where: {
                 FileManager.default.fileExists(atPath: $0)
             })
         else {
             throw GPTKError.notInstalled
         }
 
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: winePath)
-        task.arguments = [installerPath.path, "/S"]  // Silent install
-        task.environment = environment
-
-        try task.run()
-        task.waitUntilExit()
-
-        if task.terminationStatus != 0 {
-            throw GPTKError.installationFailed("Steam installation failed")
-        }
+        // Use WineManager to run the Steam installer
+        try await WineManager.shared.runWineProcess(
+            winePath: winePath,
+            executablePath: installerPath.path,
+            arguments: ["/S"],  // Silent install
+            environment: environment,
+            workingDirectory: defaultBottlePath,
+            defaultBottlePath: defaultBottlePath
+        )
 
         // Clean up installer
         try? fileManager.removeItem(at: installerPath)
@@ -556,6 +525,14 @@ class GamePortingToolkitManager: ObservableObject {
         saveUserGames()
     }
 
+    // Remove a user game from the library
+    func removeUserGame(_ game: Game) async {
+        await MainActor.run {
+            self.installedGames.removeAll { $0.id == game.id }
+        }
+        saveUserGames()
+    }
+
     // MARK: - Bottles Management
 
     private func saveBottles() {
@@ -587,23 +564,43 @@ class GamePortingToolkitManager: ObservableObject {
         ).expandingTildeInPath
         do {
             try fileManager.createDirectory(atPath: bottlePath, withIntermediateDirectories: true)
-            // Initialize the bottle with wineboot to create the correct structure
+
+            // Initialize the bottle with proper Wine configuration
             let winePath = [
-                "/opt/homebrew/bin/wine64",
-                "/usr/local/bin/wine64",
                 "/opt/homebrew/bin/wine",
                 "/usr/local/bin/wine",
+                "/opt/homebrew/bin/wine64",
+                "/usr/local/bin/wine64",
             ].first(where: { fileManager.fileExists(atPath: $0) })
+
             if let winePath = winePath {
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: winePath)
-                process.arguments = ["wineboot", "-u"]
-                process.environment = getOptimizedEnvironment(
-                    for: Bottle(name: name, path: bottlePath))
-                process.currentDirectoryURL = URL(fileURLWithPath: bottlePath)
-                try process.run()
-                process.waitUntilExit()
+                print("[GPTK] Initializing bottle \(name) at \(bottlePath)")
+
+                // First initialize the Wine prefix
+                let initProcess = Process()
+                initProcess.executableURL = URL(fileURLWithPath: winePath)
+                initProcess.arguments = ["wineboot", "--init"]
+                var initEnv = getOptimizedEnvironment(for: Bottle(name: name, path: bottlePath))
+                initEnv["WINEPREFIX"] = bottlePath
+                initProcess.environment = initEnv
+                initProcess.currentDirectoryURL = URL(fileURLWithPath: bottlePath)
+                try initProcess.run()
+                initProcess.waitUntilExit()
+
+                // Then run wineboot to finalize setup
+                let bootProcess = Process()
+                bootProcess.executableURL = URL(fileURLWithPath: winePath)
+                bootProcess.arguments = ["wineboot", "-u"]
+                bootProcess.environment = initEnv
+                bootProcess.currentDirectoryURL = URL(fileURLWithPath: bottlePath)
+                try bootProcess.run()
+                bootProcess.waitUntilExit()
+
+                print("[GPTK] Bottle \(name) initialized successfully")
+            } else {
+                print("[GPTK] Warning: Wine not found, bottle created without initialization")
             }
+
             let bottle = Bottle(name: name, path: bottlePath)
             await MainActor.run {
                 self.bottles.append(bottle)
@@ -631,19 +628,113 @@ class GamePortingToolkitManager: ObservableObject {
     }
 
     func installDependency(_ dependency: String, for bottle: Bottle) async throws {
-        // Find winetricks binary directly
-        guard
-            let winetricksPath = ["/opt/homebrew/bin/winetricks", "/usr/local/bin/winetricks"]
-                .first(where: { fileManager.fileExists(atPath: $0) })
-        else {
-            throw GPTKError.installationFailed(
-                "winetricks is not installed. Please run 'brew install winetricks' in Terminal.")
+        await MainActor.run {
+            self.isInstallingComponents = true
+            self.installationProgress = 0.1
+            self.installationStatus = "Installing \(dependency)..."
         }
+
+        // Auto-install winetricks if missing
+        var winetricksPath = ["/opt/homebrew/bin/winetricks", "/usr/local/bin/winetricks"]
+            .first(where: { fileManager.fileExists(atPath: $0) })
+
+        if winetricksPath == nil {
+            await MainActor.run {
+                self.installationStatus = "Installing winetricks first..."
+            }
+
+            guard let brewPath = getBrewPath() else {
+                throw GPTKError.homebrewRequired
+            }
+
+            // Install winetricks
+            let installProcess = Process()
+            installProcess.executableURL = URL(fileURLWithPath: brewPath)
+            installProcess.arguments = ["install", "winetricks"]
+            try installProcess.run()
+            installProcess.waitUntilExit()
+
+            if installProcess.terminationStatus != 0 {
+                throw GPTKError.installationFailed("Failed to install winetricks")
+            }
+
+            // Try to find winetricks again
+            winetricksPath = ["/opt/homebrew/bin/winetricks", "/usr/local/bin/winetricks"]
+                .first(where: { fileManager.fileExists(atPath: $0) })
+
+            guard winetricksPath != nil else {
+                throw GPTKError.installationFailed("winetricks installation failed")
+            }
+        }
+
+        await MainActor.run {
+            self.installationProgress = 0.3
+            self.installationStatus = "Preparing Wine prefix..."
+        }
+
+        // Initialize bottle if it doesn't exist
+        if !fileManager.fileExists(atPath: bottle.path) {
+            try fileManager.createDirectory(atPath: bottle.path, withIntermediateDirectories: true)
+
+            // Initialize Wine prefix properly
+            guard
+                let winePath = [
+                    "/opt/homebrew/bin/wine",
+                    "/usr/local/bin/wine",
+                    "/opt/homebrew/bin/wine64",
+                    "/usr/local/bin/wine64",
+                ].first(where: { fileManager.fileExists(atPath: $0) })
+            else {
+                throw GPTKError.installationFailed("Wine not found for bottle initialization")
+            }
+
+            let initProcess = Process()
+            initProcess.executableURL = URL(fileURLWithPath: winePath)
+            initProcess.arguments = ["wineboot", "--init"]
+            var initEnv = getOptimizedEnvironment(for: bottle)
+            initEnv["WINEPREFIX"] = bottle.path
+            initProcess.environment = initEnv
+            initProcess.currentDirectoryURL = URL(fileURLWithPath: bottle.path)
+            try initProcess.run()
+            initProcess.waitUntilExit()
+
+            print("[GPTK] Initialized Wine prefix at: \(bottle.path)")
+        }
+
+        await MainActor.run {
+            self.installationProgress = 0.5
+            self.installationStatus = "Installing \(dependency) component..."
+        }
+
         var env = getOptimizedEnvironment(for: bottle)
         env["WINEPREFIX"] = bottle.path
+        env["DISPLAY"] = ":0.0"  // Set display for GUI components
+        env["WINEDLLOVERRIDES"] = "winemenubuilder.exe=d"  // Disable menu builder
+        env["WINETRICKS_LATEST_VERSION_CHECK"] = "disabled"  // Skip version check
+
+        // Map components to proper winetricks verbs
+        let componentMap = [
+            "vulkan": "vulkan",
+            "directx11": "d3d11",
+            "directx12": "d3d12core",
+            "vcrun2015": "vcrun2019",  // Use newer runtime
+            "d3dcompiler_47": "d3dcompiler_47",
+            "dotnet48": "dotnet48",
+            "dxvk": "dxvk",
+        ]
+
+        let winetricksComponent = componentMap[dependency] ?? dependency
+
+        print(
+            "[GPTK] Installing \(winetricksComponent) (mapped from \(dependency)) in bottle \(bottle.name)"
+        )
+        print("[GPTK] Wine prefix: \(bottle.path)")
+        print("[GPTK] Using winetricks: \(winetricksPath!)")
+
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: winetricksPath)
-        process.arguments = [dependency]
+        process.executableURL = URL(fileURLWithPath: winetricksPath!)
+        // Use --unattended flag to avoid GUI prompts and --force for problematic components
+        process.arguments = ["--unattended", "--force", winetricksComponent]
         process.environment = env
         process.currentDirectoryURL = URL(fileURLWithPath: bottle.path)
         let pipe = Pipe()
@@ -653,69 +744,218 @@ class GamePortingToolkitManager: ObservableObject {
         process.waitUntilExit()
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         let output = String(data: data, encoding: .utf8) ?? ""
-        print("[Winetricks Output]", output)
-        if process.terminationStatus == 0 {
+        print("[Winetricks Output] \(output)")
+
+        await MainActor.run {
+            self.installationProgress = 0.9
+        }
+
+        if process.terminationStatus == 0 || process.terminationStatus == 1 {  // winetricks sometimes returns 1 but still succeeds
+            print("[GPTK] Successfully installed \(dependency)")
             if let idx = bottles.firstIndex(of: bottle) {
-                bottles[idx].dependencies.append(dependency)
+                await MainActor.run {
+                    // Only add if not already present
+                    if !self.bottles[idx].dependencies.contains(dependency) {
+                        self.bottles[idx].dependencies.append(dependency)
+                    }
+                }
                 saveBottles()
             }
+
+            await MainActor.run {
+                self.installationProgress = 1.0
+                self.installationStatus = "\(dependency) installed successfully"
+                self.isInstallingComponents = false
+            }
         } else {
+            await MainActor.run {
+                self.isInstallingComponents = false
+            }
+            print("[GPTK] Failed to install \(dependency), exit code: \(process.terminationStatus)")
             throw GPTKError.installationFailed(
-                "Failed to install \(dependency) in bottle \(bottle.name). Output: \(output)")
+                "Failed to install \(dependency) in bottle \(bottle.name). Exit code: \(process.terminationStatus)\nOutput: \(output)"
+            )
         }
     }
 
-    // Check if any Wine or GPTK binary exists
-    var isWineOrGPTKAvailable: Bool {
-        let possibleWinePaths = [
-            "/opt/homebrew/bin/wine",
-            "/opt/homebrew/bin/wine64",
-            "/usr/local/bin/wine64",
-        ]
-        return possibleWinePaths.contains { fileManager.fileExists(atPath: $0) }
-    }
-    // Install Wine and dependencies using Homebrew
-    func installWineAndDependencies() async throws {
-        guard isHomebrewInstalled(), let brewPath = getBrewPath() else {
-            throw GPTKError.homebrewRequired
-        }
+    // MARK: - CrossOver Integration
+
+    func importCrossOverBottle(bottleName: String, crossOverPath: String) async {
+        let bottle = Bottle(
+            name: "CrossOver-\(bottleName)",
+            path: crossOverPath,
+            dependencies: []  // CrossOver handles dependencies internally
+        )
+
         await MainActor.run {
-            installationProgress = 0.2
-            installationStatus = "Installing Wine and dependencies..."
+            self.bottles.append(bottle)
+            if self.selectedBottle == nil {
+                self.selectedBottle = bottle
+            }
         }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: brewPath)
-        process.arguments = [
-            "install",
-            "wine",
-            "wget",
-            "curl",
-            "git",
-            "xz",
-            "python",
-            "sdl2",
-            "freetype",
-            "fontconfig",
-            "libxml2",
-            "faudio",
-            "cmake",
-            "ninja",
-        ]
-        return try await withCheckedThrowingContinuation { continuation in
-            process.terminationHandler = { process in
-                if process.terminationStatus == 0 {
-                    continuation.resume()
-                } else {
-                    let errorMessage = "Failed to install Wine and dependencies"
-                    continuation.resume(throwing: GPTKError.installationFailed(errorMessage))
+        saveBottles()
+
+        // Scan for games in this bottle
+        await scanForCrossOverGames(in: bottle)
+    }
+
+    private func scanForCrossOverGames(in bottle: Bottle) async {
+        let steamPath = "\(bottle.path)/drive_c/Program Files (x86)/Steam"
+        let steamAppsPath = "\(steamPath)/steamapps/common"
+
+        var foundGames: [Game] = []
+
+        // Check if Steam exists in this bottle
+        if fileManager.fileExists(atPath: "\(steamPath)/steam.exe") {
+            let steamGame = Game(
+                name: "Steam (CrossOver)",
+                executablePath: "\(steamPath)/steam.exe",
+                installPath: steamPath
+            )
+            foundGames.append(steamGame)
+        }
+
+        // Scan for individual games
+        if fileManager.fileExists(atPath: steamAppsPath) {
+            do {
+                let gameDirectories = try fileManager.contentsOfDirectory(atPath: steamAppsPath)
+
+                for gameDir in gameDirectories {
+                    let gamePath = "\(steamAppsPath)/\(gameDir)"
+
+                    // Look for game executables
+                    if let gameExecutables = try? fileManager.contentsOfDirectory(atPath: gamePath)
+                    {
+                        for file in gameExecutables where file.hasSuffix(".exe") {
+                            let executablePath = "\(gamePath)/\(file)"
+
+                            // Skip certain system executables
+                            let skipFiles = ["unins000.exe", "vcredist", "directx", "setup.exe"]
+                            if !skipFiles.contains(where: { file.lowercased().contains($0) }) {
+                                let game = Game(
+                                    name: "\(gameDir) (CrossOver)",
+                                    executablePath: executablePath,
+                                    installPath: gamePath
+                                )
+                                foundGames.append(game)
+                            }
+                        }
+                    }
+                }
+            } catch {
+                print("Error scanning CrossOver games: \(error)")
+            }
+        }
+
+        await MainActor.run {
+            self.installedGames.append(contentsOf: foundGames)
+        }
+        saveUserGames()
+    }  // MARK: - Enhanced CrossOver Integration
+
+    func detectCrossOverBottles() async -> [String] {
+        let crossOverBottlesPath =
+            NSHomeDirectory() + "/Library/Application Support/CrossOver/Bottles"
+        var detectedBottles: [String] = []
+
+        do {
+            let bottleNames = try fileManager.contentsOfDirectory(atPath: crossOverBottlesPath)
+            for bottleName in bottleNames {
+                let bottlePath = "\(crossOverBottlesPath)/\(bottleName)"
+                // Check if this bottle has Steam installed
+                let steamPath = "\(bottlePath)/drive_c/Program Files (x86)/Steam/steam.exe"
+                if fileManager.fileExists(atPath: steamPath) {
+                    detectedBottles.append(bottleName)
                 }
             }
-            do {
-                try process.run()
-            } catch {
-                continuation.resume(throwing: error)
+        } catch {
+            print("Could not access CrossOver bottles: \(error)")
+        }
+
+        return detectedBottles
+    }
+
+    func importCrossOverSteamBottle(bottleName: String) async throws {
+        let crossOverBottlePath =
+            NSHomeDirectory() + "/Library/Application Support/CrossOver/Bottles/\(bottleName)"
+        let steamPath = "\(crossOverBottlePath)/drive_c/Program Files (x86)/Steam/steam.exe"
+
+        guard fileManager.fileExists(atPath: steamPath) else {
+            throw GPTKError.gameNotFound("Steam not found in CrossOver bottle '\(bottleName)'")
+        }
+
+        // Import the bottle into kimiz
+        await importCrossOverBottle(bottleName: bottleName, crossOverPath: crossOverBottlePath)
+
+        await MainActor.run {
+            self.initializationStatus =
+                "Successfully imported CrossOver Steam bottle: \(bottleName)"
+        }
+
+        print("[kimiz] Successfully imported CrossOver Steam bottle: \(bottleName)")
+        print("[kimiz] Steam path: \(steamPath)")
+        print("[kimiz] This preserves your existing Steam login and game files safely")
+    }
+
+    func getCrossOverWinePath() -> String? {
+        let crossOverWinePaths = [
+            "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wine64",
+            "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wine",
+            NSHomeDirectory()
+                + "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wine64",
+            NSHomeDirectory()
+                + "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wine",
+        ]
+
+        return crossOverWinePaths.first(where: { fileManager.fileExists(atPath: $0) })
+    }
+
+    private func extractBottlePathFromGame(_ game: Game) -> String {
+        // Extract bottle path from game executable path
+        if game.executablePath.contains("CrossOver/Bottles") {
+            let components = game.executablePath.components(separatedBy: "/")
+            if let bottlesIndex = components.firstIndex(of: "Bottles"),
+                bottlesIndex + 1 < components.count
+            {
+                let bottleName = components[bottlesIndex + 1]
+                return NSHomeDirectory()
+                    + "/Library/Application Support/CrossOver/Bottles/\(bottleName)"
             }
         }
+        return defaultBottlePath
+    }
+
+    // Enhanced scanning specifically for Elden Ring
+    func scanForEldenRing() async -> [Game] {
+        var eldenRingGames: [Game] = []
+
+        // Scan all CrossOver bottles for Elden Ring
+        let crossOverBottlesPath =
+            NSHomeDirectory() + "/Library/Application Support/CrossOver/Bottles"
+
+        do {
+            let bottleNames = try fileManager.contentsOfDirectory(atPath: crossOverBottlesPath)
+            for bottleName in bottleNames {
+                let steamAppsPath =
+                    "\(crossOverBottlesPath)/\(bottleName)/drive_c/Program Files (x86)/Steam/steamapps/common"
+
+                // Look for Elden Ring specifically
+                let eldenRingPath = "\(steamAppsPath)/ELDEN RING/Game/eldenring.exe"
+                if fileManager.fileExists(atPath: eldenRingPath) {
+                    let game = Game(
+                        name: "Elden Ring (CrossOver)",
+                        executablePath: eldenRingPath,
+                        installPath: "\(steamAppsPath)/ELDEN RING"
+                    )
+                    eldenRingGames.append(game)
+                    print("[kimiz] Found Elden Ring in CrossOver bottle: \(bottleName)")
+                }
+            }
+        } catch {
+            print("Error scanning for Elden Ring: \(error)")
+        }
+
+        return eldenRingGames
     }
 }
 

@@ -306,18 +306,11 @@ struct GamesLibraryView: View {
     private func installGameExecutable(at url: URL) {
         Task {
             do {
-                // Copy the .exe to a temp location
-                let tempDir = FileManager.default.temporaryDirectory
-                let destination = tempDir.appendingPathComponent(url.lastPathComponent)
-                if FileManager.default.fileExists(atPath: destination.path) {
-                    try FileManager.default.removeItem(at: destination)
-                }
-                try FileManager.default.copyItem(at: url, to: destination)
-
-                // Add the game to the installedGames list and persist it
+                // Don't copy the executable - use it from its original location
+                // This ensures supporting DLL files and game data remain accessible
                 let newGame = Game(
                     name: url.deletingPathExtension().lastPathComponent,
-                    executablePath: destination.path,
+                    executablePath: url.path,
                     installPath: url.deletingLastPathComponent().path
                 )
                 await gamePortingToolkitManager.addUserGame(newGame)

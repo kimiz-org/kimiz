@@ -41,10 +41,10 @@ struct ContentView: View {
 
     private var mainInterface: some View {
         TabView(selection: $selectedTab) {
-            GamesLibraryView()
+            LibraryView()
                 .tabItem {
-                    Image(systemName: "gamecontroller")
-                    Text("Games")
+                    Image(systemName: "books.vertical")
+                    Text("Library")
                 }
                 .tag(0)
                 .environmentObject(gamePortingToolkitManager)
@@ -62,7 +62,7 @@ struct ContentView: View {
                     Image(systemName: "gear")
                     Text("Settings")
                 }
-                .tag(3)
+                .tag(2)
                 .environmentObject(gamePortingToolkitManager)
         }
     }

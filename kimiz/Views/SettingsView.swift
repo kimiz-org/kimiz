@@ -20,7 +20,7 @@ struct SettingsView: View {
         NavigationView {
             Form {
                 // Game Porting Toolkit Status Section
-                Section(header: Text("Game Porting Toolkit")) {
+                Section {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Circle()
@@ -40,10 +40,12 @@ struct SettingsView: View {
                     }
                     .padding(.vertical, 8)
                     .listRowInsets(EdgeInsets())
+                } header: {
+                    Text("Game Porting Toolkit")
                 }
 
                 // Game Settings Section
-                Section(header: Text("Game Settings")) {
+                Section {
                     Toggle("Auto-detect installed games", isOn: $autoDetectGames)
                     Toggle("Show performance overlay", isOn: $enableHUD)
 
@@ -52,11 +54,13 @@ struct SettingsView: View {
                             await gamePortingToolkitManager.scanForGames()
                         }
                     }
-                    .disabled(!gamePortingToolkitManager.isWineOrGPTKAvailable)
+                    .disabled(!gamePortingToolkitManager.isGPTKInstalled)
+                } header: {
+                    Text("Game Settings")
                 }
 
                 // Performance Settings Section
-                Section(header: Text("Performance")) {
+                Section {
                     Toggle("Enable Esync", isOn: $useEsync)
                         .help("Improves Wine performance by using eventfd-based synchronization")
 
@@ -77,10 +81,12 @@ struct SettingsView: View {
                             .foregroundColor(.secondary)
                     }
                     .padding(.top, 8)
+                } header: {
+                    Text("Performance")
                 }
 
                 // Advanced Settings Section
-                Section(header: Text("Advanced")) {
+                Section {
                     Toggle("Debug mode", isOn: $enableDebugMode)
 
                     Button("Reinstall Game Porting Toolkit") {
@@ -130,10 +136,12 @@ struct SettingsView: View {
                         resetSettings()
                     }
                     .foregroundColor(.red)
+                } header: {
+                    Text("Advanced")
                 }
 
                 // About Section
-                Section(header: Text("About")) {
+                Section {
                     HStack {
                         Text("Version")
                         Spacer()
@@ -146,6 +154,8 @@ struct SettingsView: View {
                             NSWorkspace.shared.open(url)
                         }
                     }
+                } header: {
+                    Text("About")
                 }
             }
             .navigationTitle("Settings")

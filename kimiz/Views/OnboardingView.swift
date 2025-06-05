@@ -297,8 +297,7 @@ struct OnboardingView: View {
     private func checkInitialStateAndSetup() {
         // Only pass onboarding if at least one bottle exists AND Wine/GPTK is available
         if !gamePortingToolkitManager.bottles.isEmpty
-            && (gamePortingToolkitManager.isWineOrGPTKAvailable
-                || gamePortingToolkitManager.isGPTKInstalled)
+            && gamePortingToolkitManager.isGPTKInstalled
         {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 completeOnboarding()
@@ -373,7 +372,7 @@ struct OnboardingView: View {
                     gamePortingToolkitManager.installationProgress = 0.1
                     gamePortingToolkitManager.installationStatus = "Starting Wine installation..."
                 }
-                try await gamePortingToolkitManager.installWineAndDependencies()
+                try await gamePortingToolkitManager.installDependenciesOnly()
                 await gamePortingToolkitManager.checkGPTKInstallation()
                 await MainActor.run {
                     gamePortingToolkitManager.isInstallingComponents = false
@@ -402,6 +401,6 @@ struct OnboardingView: View {
 }
 
 #Preview {
-    OnboardingView(showOnboarding: .constant(true))
+    OnboardingView(showOnboarding: Binding.constant(true))
         .environmentObject(GamePortingToolkitManager.shared)
 }
