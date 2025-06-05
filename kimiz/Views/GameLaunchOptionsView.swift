@@ -8,10 +8,9 @@
 import SwiftUI
 
 struct GameLaunchOptionsView: View {
-    let game: GameInstallation
-    @EnvironmentObject var embeddedWineManager: EmbeddedWineManager
+    let game: Game
+    @EnvironmentObject var gamePortingToolkitManager: GamePortingToolkitManager
     @State private var launchArguments: String = ""
-    @State private var selectedWinePrefixIndex = 0
     @State private var enableDXVK = true
     @State private var enableEsync = true
     @State private var showHUD = false
@@ -21,8 +20,6 @@ struct GameLaunchOptionsView: View {
     @AppStorage("defaultWindowMode") private var defaultWindowMode = WindowMode.windowed.rawValue
     @AppStorage("defaultDXVK") private var defaultDXVK = true
     @AppStorage("defaultEsync") private var defaultEsync = true
-
-    private var availablePrefixes: [WinePrefix] = []
 
     enum WindowMode: String, CaseIterable, Identifiable {
         case windowed = "Windowed"
@@ -135,7 +132,6 @@ struct GameLaunchOptionsView: View {
         }
         .frame(width: 500, height: 450)
         .onAppear {
-            // Load saved settings for this game if available
             loadSavedSettings()
         }
     }
@@ -150,8 +146,6 @@ struct GameLaunchOptionsView: View {
     }
 
     private func loadSavedSettings() {
-        // This would load game-specific settings from UserDefaults or other storage
-        // For now, just use the defaults
         windowMode = WindowMode(rawValue: defaultWindowMode) ?? .windowed
         enableDXVK = defaultDXVK
         enableEsync = defaultEsync
@@ -164,48 +158,13 @@ struct GameLaunchOptionsView: View {
     }
 
     private func launchGameWithOptions() {
-        // Build environment variables based on selected options
-        var environmentVars: [String: String] = [:]
-
-        // Graphics settings
-        if enableDXVK {
-            environmentVars["DXVK_ASYNC"] = "1"
-            environmentVars["DXVK_STATE_CACHE"] = "1"
-        }
-
-        if enableEsync {
-            environmentVars["WINEESYNC"] = "1"
-        }
-
-        if showHUD {
-            environmentVars["DXVK_HUD"] = "fps,frametimes"
-            environmentVars["MTL_HUD_ENABLED"] = "1"
-        }
-
-        // Window mode
-        switch windowMode {
-        case .fullscreen:
-            environmentVars["WINE_FULLSCREEN"] = "1"
-        case .borderless:
-            environmentVars["WINE_BORDERLESS"] = "1"
-        case .windowed:
-            break  // Default
-        }
-
-        // Split launch arguments
-        let args = launchArguments.split(separator: " ").map(String.init)
-
         Task {
             do {
                 // Close the options sheet
                 isPresented = false
 
-                // Launch the game with the specified options
-                try await embeddedWineManager.launchGame(
-                    executablePath: game.executablePath,
-                    withArgs: args,
-                    environment: environmentVars
-                )
+                // Launch the game using GPTK manager
+                try await gamePortingToolkitManager.launchGame(game)
             } catch {
                 print("Failed to launch game: \(error)")
             }
@@ -215,15 +174,13 @@ struct GameLaunchOptionsView: View {
 
 struct GameLaunchOptionsView_Previews: PreviewProvider {
     static var previews: some View {
-        let winePrefix = WinePrefix(name: "default", backend: .gamePortingToolkit)
-        let game = GameInstallation(
+        let game = Game(
             name: "Sample Game",
             executablePath: "/path/to/game.exe",
-            winePrefix: winePrefix,
             installPath: "/path/to/game"
         )
 
         GameLaunchOptionsView(game: game, isPresented: .constant(true))
-            .environmentObject(EmbeddedWineManager())
+            .environmentObject(GamePortingToolkitManager.shared)
     }
 }

@@ -9,10 +9,12 @@ import SwiftUI
 
 @main
 struct kimizApp: App {
+    @StateObject private var gamePortingToolkitManager = GamePortingToolkitManager.shared
 
     var body: some Scene {
         WindowGroup {
-
+            ContentView()
+                .environmentObject(gamePortingToolkitManager)
         }
     }
 }

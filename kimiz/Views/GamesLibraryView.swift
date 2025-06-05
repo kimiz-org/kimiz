@@ -8,17 +8,17 @@
 import SwiftUI
 
 struct GamesLibraryView: View {
-    @EnvironmentObject var embeddedWineManager: EmbeddedWineManager
+    @EnvironmentObject var gamePortingToolkitManager: GamePortingToolkitManager
     @State private var searchText = ""
-    @State private var selectedGame: GameInstallation?
+    @State private var selectedGame: Game?
     @State private var isRefreshing = false
-    @State private var showWineStatusSheet = false
+    @State private var showGPTKStatusSheet = false
 
-    var filteredGames: [GameInstallation] {
+    var filteredGames: [Game] {
         if searchText.isEmpty {
-            return embeddedWineManager.installedGames
+            return gamePortingToolkitManager.installedGames
         }
-        return embeddedWineManager.installedGames.filter { game in
+        return gamePortingToolkitManager.installedGames.filter { game in
             game.name.localizedCaseInsensitiveContains(searchText)
         }
     }
@@ -26,14 +26,14 @@ struct GamesLibraryView: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                // Wine status banner when not ready
-                if !embeddedWineManager.isWineReady && !embeddedWineManager.isInstallingComponents {
-                    wineStatusBanner
+                // GPTK status banner when not ready
+                if !gamePortingToolkitManager.isGPTKInstalled {
+                    gptkStatusBanner
                 }
 
-                // Installation progress banner
-                if embeddedWineManager.isInstallingComponents {
-                    installationProgressBanner
+                // Initialization progress banner
+                if gamePortingToolkitManager.isInitializing {
+                    initializationProgressBanner
                 }
 
                 // Search bar
@@ -60,34 +60,61 @@ struct GamesLibraryView: View {
                         Button("Install Steam") {
                             installSteam()
                         }
-                        .disabled(!embeddedWineManager.isWineReady)
+                        .disabled(!gamePortingToolkitManager.isGPTKInstalled)
 
                         Button("Add Game Executable") {
                             // Open file picker to add a game
                         }
-                        .disabled(!embeddedWineManager.isWineReady)
+                        .disabled(!gamePortingToolkitManager.isGPTKInstalled)
 
                         Divider()
 
-                        Button("Wine Status") {
-                            showWineStatusSheet = true
+                        Button("GPTK Status") {
+                            showGPTKStatusSheet = true
                         }
                     } label: {
                         Label("Actions", systemImage: "ellipsis.circle")
                     }
                 }
             }
-            .sheet(isPresented: $showWineStatusSheet) {
+            .sheet(isPresented: $showGPTKStatusSheet) {
                 VStack {
-                    Text("Wine Runtime Status")
+                    Text("Game Porting Toolkit Status")
                         .font(.title2)
                         .padding(.top)
 
-                    WineStatusView()
-                        .padding()
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text("Installation Status:")
+                            Spacer()
+                            Text(
+                                gamePortingToolkitManager.isGPTKInstalled
+                                    ? "Installed" : "Not Installed"
+                            )
+                            .foregroundColor(
+                                gamePortingToolkitManager.isGPTKInstalled ? .green : .red)
+                        }
+
+                        if let version = gamePortingToolkitManager.getGamePortingToolkitVersion() {
+                            HStack {
+                                Text("Version:")
+                                Spacer()
+                                Text(version)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+
+                        HStack {
+                            Text("Status:")
+                            Spacer()
+                            Text(gamePortingToolkitManager.initializationStatus)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .padding()
 
                     Button("Close") {
-                        showWineStatusSheet = false
+                        showGPTKStatusSheet = false
                     }
                     .padding(.bottom)
                 }
@@ -95,7 +122,7 @@ struct GamesLibraryView: View {
             }
         }
         .task {
-            await embeddedWineManager.scanForInstalledGames()
+            await gamePortingToolkitManager.scanForGames()
         }
     }
 
@@ -126,7 +153,7 @@ struct GamesLibraryView: View {
         }
         .listStyle(.plain)
         .refreshable {
-            await embeddedWineManager.scanForInstalledGames()
+            await gamePortingToolkitManager.scanForGames()
         }
     }
 
@@ -142,20 +169,20 @@ struct GamesLibraryView: View {
                     .font(.title2)
                     .fontWeight(.medium)
 
-                if embeddedWineManager.isWineReady {
-                    Text("Wine is ready! Install Steam or add games to get started")
+                if gamePortingToolkitManager.isGPTKInstalled {
+                    Text("Game Porting Toolkit is ready! Install Steam or add games to get started")
                         .font(.body)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
                 } else {
-                    Text("Please install Wine or Game Porting Toolkit first")
+                    Text("Please install Game Porting Toolkit first")
                         .font(.body)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
                 }
             }
 
-            if embeddedWineManager.isWineReady {
+            if gamePortingToolkitManager.isGPTKInstalled {
                 Button("Install Steam") {
                     installSteam()
                 }
@@ -166,8 +193,8 @@ struct GamesLibraryView: View {
                 }
                 .buttonStyle(.bordered)
             } else {
-                Button("Setup Wine") {
-                    showWineStatusSheet = true
+                Button("Setup GPTK") {
+                    showGPTKStatusSheet = true
                 }
                 .buttonStyle(.borderedProminent)
             }
@@ -180,15 +207,15 @@ struct GamesLibraryView: View {
     private func refreshGames() {
         isRefreshing = true
         Task {
-            await embeddedWineManager.scanForInstalledGames()
+            await gamePortingToolkitManager.scanForGames()
             isRefreshing = false
         }
     }
 
-    private func launchGame(_ game: GameInstallation) {
+    private func launchGame(_ game: Game) {
         Task {
             do {
-                try await embeddedWineManager.launchGame(game)
+                try await gamePortingToolkitManager.launchGame(game)
             } catch {
                 // Handle error launching game
                 print("Error launching game: \(error)")
@@ -199,10 +226,10 @@ struct GamesLibraryView: View {
     private func installSteam() {
         Task {
             do {
-                try await embeddedWineManager.installSteam()
+                try await gamePortingToolkitManager.installSteam()
 
                 // Refresh games after Steam installation
-                await embeddedWineManager.scanForInstalledGames()
+                await gamePortingToolkitManager.scanForGames()
             } catch {
                 // Handle error installing Steam
                 print("Error installing Steam: \(error)")
@@ -210,20 +237,20 @@ struct GamesLibraryView: View {
         }
     }
 
-    // MARK: - Wine Status Banner
-    private var wineStatusBanner: some View {
+    // MARK: - GPTK Status Banner
+    private var gptkStatusBanner: some View {
         HStack(spacing: 12) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundColor(.white)
 
-            Text("Wine runtime is not installed")
+            Text("Game Porting Toolkit is not installed")
                 .foregroundColor(.white)
                 .font(.callout)
 
             Spacer()
 
             Button("Install Now") {
-                showWineStatusSheet = true
+                showGPTKStatusSheet = true
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
@@ -235,14 +262,14 @@ struct GamesLibraryView: View {
         .background(Color.orange.opacity(0.8))
     }
 
-    // MARK: - Installation Progress Banner
-    private var installationProgressBanner: some View {
+    // MARK: - Initialization Progress Banner
+    private var initializationProgressBanner: some View {
         HStack(spacing: 12) {
             ProgressView()
                 .scaleEffect(0.7)
                 .tint(.white)
 
-            Text("Installing \(embeddedWineManager.installationComponentName)...")
+            Text(gamePortingToolkitManager.initializationStatus)
                 .foregroundColor(.white)
                 .font(.callout)
 
@@ -256,12 +283,12 @@ struct GamesLibraryView: View {
 
 // MARK: - Game Row View
 struct GameRowView: View {
-    let game: GameInstallation
+    let game: Game
     let onLaunch: () -> Void
 
     @State private var isHovered = false
     @State private var showingLaunchOptions = false
-    @EnvironmentObject var embeddedWineManager: EmbeddedWineManager
+    @EnvironmentObject var gamePortingToolkitManager: GamePortingToolkitManager
 
     var body: some View {
         HStack(spacing: 16) {
@@ -295,16 +322,6 @@ struct GameRowView: View {
                             .foregroundColor(.secondary)
                     } else {
                         Text("Never played")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-
-                    if game.playTime > 0 {
-                        Text("•")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-
-                        Text(formatPlayTime(game.playTime))
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -343,7 +360,7 @@ struct GameRowView: View {
         }
         .sheet(isPresented: $showingLaunchOptions) {
             GameLaunchOptionsView(game: game, isPresented: $showingLaunchOptions)
-                .environmentObject(embeddedWineManager)
+                .environmentObject(gamePortingToolkitManager)
         }
         .padding(16)
         .background(
@@ -375,5 +392,5 @@ struct GameRowView: View {
 
 #Preview {
     GamesLibraryView()
-        .environmentObject(EmbeddedWineManager())
+        .environmentObject(GamePortingToolkitManager.shared)
 }

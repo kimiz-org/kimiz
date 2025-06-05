@@ -5,10 +5,11 @@
 //  Created by Ahmet Affan Ebcioğlu on 4.06.2025.
 //
 
+import Foundation
 import SwiftUI
 
 struct SettingsView: View {
-    @EnvironmentObject var embeddedWineManager: EmbeddedWineManager
+    @EnvironmentObject var gamePortingToolkitManager: GamePortingToolkitManager
     @AppStorage("enableDebugMode") private var enableDebugMode = false
     @AppStorage("autoDetectGames") private var autoDetectGames = true
     @AppStorage("enableHUD") private var enableHUD = false
@@ -18,29 +19,44 @@ struct SettingsView: View {
     var body: some View {
         NavigationView {
             Form {
-                // Wine Status Section
-                Section("Wine Environment") {
-                    WineStatusView()
-                        .environmentObject(embeddedWineManager)
-                        .padding(.vertical, 8)
-                        .listRowInsets(EdgeInsets())
+                // Game Porting Toolkit Status Section
+                Section(header: Text("Game Porting Toolkit")) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Circle()
+                                .fill(gamePortingToolkitManager.isGPTKInstalled ? .green : .red)
+                                .frame(width: 12, height: 12)
+                            Text(
+                                gamePortingToolkitManager.isGPTKInstalled
+                                    ? "GPTK Installed" : "GPTK Not Installed"
+                            )
+                            .font(.headline)
+                        }
+
+                        if gamePortingToolkitManager.isInitializing {
+                            ProgressView(gamePortingToolkitManager.initializationStatus)
+                                .progressViewStyle(LinearProgressViewStyle())
+                        }
+                    }
+                    .padding(.vertical, 8)
+                    .listRowInsets(EdgeInsets())
                 }
 
                 // Game Settings Section
-                Section("Game Settings") {
+                Section(header: Text("Game Settings")) {
                     Toggle("Auto-detect installed games", isOn: $autoDetectGames)
                     Toggle("Show performance overlay", isOn: $enableHUD)
 
                     Button("Scan for Installed Games") {
                         Task {
-                            await embeddedWineManager.scanForInstalledGames()
+                            await gamePortingToolkitManager.scanForGames()
                         }
                     }
-                    .disabled(!embeddedWineManager.isWineReady)
+                    .disabled(!gamePortingToolkitManager.isGPTKInstalled)
                 }
 
                 // Performance Settings Section
-                Section("Performance") {
+                Section(header: Text("Performance")) {
                     Toggle("Enable Esync", isOn: $useEsync)
                         .help("Improves Wine performance by using eventfd-based synchronization")
 
@@ -64,12 +80,48 @@ struct SettingsView: View {
                 }
 
                 // Advanced Settings Section
-                Section("Advanced") {
+                Section(header: Text("Advanced")) {
                     Toggle("Debug mode", isOn: $enableDebugMode)
 
-                    Button("Reinstall Wine Environment") {
+                    Button("Reinstall Game Porting Toolkit") {
                         Task {
-                            try? await embeddedWineManager.initializeWine()
+                            do {
+                                await MainActor.run {
+                                    gamePortingToolkitManager.isInstallingComponents = true
+                                    gamePortingToolkitManager.installationProgress = 0.1
+                                    gamePortingToolkitManager.installationStatus =
+                                        "Starting installation..."
+                                }
+
+                                try await gamePortingToolkitManager.installGamePortingToolkit()
+
+                                await MainActor.run {
+                                    gamePortingToolkitManager.installationProgress = 0.9
+                                    gamePortingToolkitManager.installationStatus =
+                                        "Verifying installation..."
+                                }
+
+                                await gamePortingToolkitManager.checkGPTKInstallation()
+
+                                await MainActor.run {
+                                    gamePortingToolkitManager.isInstallingComponents = false
+                                    gamePortingToolkitManager.installationProgress = 1.0
+                                    gamePortingToolkitManager.installationStatus =
+                                        "Installation complete"
+                                }
+                            } catch GPTKError.homebrewRequired {
+                                await MainActor.run {
+                                    gamePortingToolkitManager.isInstallingComponents = false
+                                    gamePortingToolkitManager.installationStatus =
+                                        "Homebrew is required. Please install Homebrew first."
+                                }
+                            } catch {
+                                await MainActor.run {
+                                    gamePortingToolkitManager.isInstallingComponents = false
+                                    gamePortingToolkitManager.installationStatus =
+                                        "Installation failed: \(error.localizedDescription)"
+                                }
+                            }
                         }
                     }
                     .foregroundColor(.orange)
@@ -81,7 +133,7 @@ struct SettingsView: View {
                 }
 
                 // About Section
-                Section("About") {
+                Section(header: Text("About")) {
                     HStack {
                         Text("Version")
                         Spacer()
@@ -112,5 +164,5 @@ struct SettingsView: View {
 
 #Preview {
     SettingsView()
-        .environmentObject(EmbeddedWineManager())
+        .environmentObject(GamePortingToolkitManager.shared)
 }

@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct ContentView: View {
-    @StateObject private var embeddedWineManager = EmbeddedWineManager()
+    @EnvironmentObject var gamePortingToolkitManager: GamePortingToolkitManager
     @State private var selectedTab = 0
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @State private var showOnboarding = false
@@ -19,16 +19,16 @@ struct ContentView: View {
                 mainInterface
             } else {
                 OnboardingView(showOnboarding: $showOnboarding)
-                    .environmentObject(embeddedWineManager)
+                    .environmentObject(gamePortingToolkitManager)
             }
         }
         .onAppear {
             if !hasCompletedOnboarding {
                 showOnboarding = true
-            } else if !embeddedWineManager.hasCheckedWineStatus {
-                // Check Wine status on app launch if onboarding is complete
+            } else if !gamePortingToolkitManager.isGPTKInstalled {
+                // Check GPTK status on app launch if onboarding is complete
                 Task {
-                    await embeddedWineManager.checkWineInstallation()
+                    await gamePortingToolkitManager.checkGPTKInstallation()
                 }
             }
         }
@@ -47,7 +47,7 @@ struct ContentView: View {
                     Text("Games")
                 }
                 .tag(0)
-                .environmentObject(embeddedWineManager)
+                .environmentObject(gamePortingToolkitManager)
 
             InstallationView()
                 .tabItem {
@@ -55,7 +55,7 @@ struct ContentView: View {
                     Text("Install")
                 }
                 .tag(1)
-                .environmentObject(embeddedWineManager)
+                .environmentObject(gamePortingToolkitManager)
 
             SettingsView()
                 .tabItem {
@@ -63,11 +63,12 @@ struct ContentView: View {
                     Text("Settings")
                 }
                 .tag(3)
-                .environmentObject(embeddedWineManager)
+                .environmentObject(gamePortingToolkitManager)
         }
     }
 }
 
 #Preview {
     ContentView()
+        .environmentObject(GamePortingToolkitManager.shared)
 }

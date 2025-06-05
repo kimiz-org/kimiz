@@ -9,7 +9,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct InstallationView: View {
-    @EnvironmentObject var embeddedWineManager: EmbeddedWineManager
+    @EnvironmentObject var gamePortingToolkitManager: GamePortingToolkitManager
     @State private var selectedInstallationType: InstallationType = .steam
     @State private var isInstalling = false
     @State private var showingFilePicker = false
@@ -21,9 +21,9 @@ struct InstallationView: View {
         var description: String {
             switch self {
             case .steam:
-                return "Install Steam client to access your game library"
+                return "Install Steam client to access your game library using Game Porting Toolkit"
             case .executable:
-                return "Install a Windows .exe application or game"
+                return "Install a Windows .exe application or game using Game Porting Toolkit"
             }
         }
 
@@ -38,56 +38,58 @@ struct InstallationView: View {
     }
 
     var body: some View {
-        NavigationView {
-            VStack(spacing: 24) {
-                // Installation type selector
-                Picker("Installation Type", selection: $selectedInstallationType) {
-                    ForEach(InstallationType.allCases, id: \.self) { type in
-                        Label(type.rawValue, systemImage: type.icon)
-                            .tag(type)
-                    }
+        VStack(spacing: 24) {
+            // Header
+            VStack(spacing: 8) {
+                Image(systemName: "square.and.arrow.down")
+                    .font(.system(size: 48))
+                    .foregroundColor(.accentColor)
+
+                Text("Install Applications")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+
+                Text("Install Windows games and applications using Apple's Game Porting Toolkit")
+                    .font(.body)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.top)
+
+            // Installation type cards
+            VStack(spacing: 16) {
+                ForEach(InstallationType.allCases, id: \.self) { type in
+                    InstallationCard(
+                        type: type,
+                        isSelected: selectedInstallationType == type,
+                        onSelect: { selectedInstallationType = type },
+                        isInstalling: isInstalling,
+                        onInstall: performInstallation,
+                        isEnabled: gamePortingToolkitManager.isGPTKInstalled
+                    )
                 }
-                .pickerStyle(.segmented)
-                .padding(.horizontal)
+            }
+            .padding(.horizontal)
 
-                // Description and install button
-                VStack(spacing: 16) {
-                    Image(systemName: selectedInstallationType.icon)
-                        .font(.system(size: 48))
-                        .foregroundColor(.accentColor)
-
-                    Text(selectedInstallationType.description)
-                        .font(.body)
+            if !gamePortingToolkitManager.isGPTKInstalled {
+                VStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.orange)
+                    Text("Game Porting Toolkit is not installed")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                    Text("Please install GPTK in Settings before installing applications")
+                        .font(.caption2)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
-
-                    Button(action: performInstallation) {
-                        HStack {
-                            if isInstalling {
-                                ProgressView()
-                                    .controlSize(.small)
-                                Text("Installing...")
-                            } else {
-                                Text("Install \(selectedInstallationType.rawValue)")
-                            }
-                        }
-                        .frame(minWidth: 200)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(isInstalling || !embeddedWineManager.isWineReady)
-
-                    if !embeddedWineManager.isWineReady {
-                        Text("Wine is not ready. Please set it up in Settings first.")
-                            .font(.caption)
-                            .foregroundColor(.orange)
-                    }
                 }
-                .frame(maxWidth: 400)
-
-                Spacer()
+                .padding()
+                .background(Color.orange.opacity(0.1))
+                .cornerRadius(8)
+                .padding(.horizontal)
             }
-            .padding()
-            .navigationTitle("Install")
+
+            Spacer()
         }
         .fileImporter(
             isPresented: $showingFilePicker,
@@ -111,7 +113,7 @@ struct InstallationView: View {
         isInstalling = true
         Task {
             do {
-                try await embeddedWineManager.installSteam()
+                try await gamePortingToolkitManager.installSteam()
                 await MainActor.run {
                     isInstalling = false
                 }
@@ -139,15 +141,14 @@ struct InstallationView: View {
         isInstalling = true
         Task {
             do {
-                // Copy file to a temporary location and run it with Wine
+                // Copy file to a temporary location and run it
                 let fileName = url.lastPathComponent
-                let tempDir = NSTemporaryDirectory()
-                let destination = URL(fileURLWithPath: tempDir).appendingPathComponent(fileName)
-
+                let tempDir = FileManager.default.temporaryDirectory
+                let destination = tempDir.appendingPathComponent(fileName)
                 try FileManager.default.copyItem(at: url, to: destination)
 
-                // Run the installer with Wine
-                _ = try await embeddedWineManager.runWineCommand([destination.path])
+                // Run the installer using GPTK
+                try await gamePortingToolkitManager.runGame(executablePath: destination.path)
 
                 await MainActor.run {
                     isInstalling = false
@@ -155,7 +156,6 @@ struct InstallationView: View {
 
                 // Clean up
                 try? FileManager.default.removeItem(at: destination)
-
             } catch {
                 await MainActor.run {
                     isInstalling = false
@@ -163,6 +163,69 @@ struct InstallationView: View {
                 print("Failed to install executable: \(error)")
             }
         }
+    }
+}
+
+struct InstallationCard: View {
+    let type: InstallationView.InstallationType
+    let isSelected: Bool
+    let onSelect: () -> Void
+    let isInstalling: Bool
+    let onInstall: () -> Void
+    let isEnabled: Bool
+
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(spacing: 16) {
+                Image(systemName: type.icon)
+                    .font(.system(size: 32))
+                    .foregroundColor(.accentColor)
+                    .frame(width: 50)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(type.rawValue)
+                        .font(.headline)
+                        .foregroundColor(.primary)
+
+                    Text(type.description)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.leading)
+                }
+
+                Spacer()
+
+                if isSelected {
+                    Button(action: onInstall) {
+                        HStack {
+                            if isInstalling {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Installing...")
+                            } else {
+                                Text("Install")
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isInstalling || !isEnabled)
+                }
+            }
+            .padding()
+            .background(isSelected ? Color.accentColor.opacity(0.1) : Color.clear)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(
+                        isSelected ? Color.accentColor : Color.gray.opacity(0.3),
+                        lineWidth: isSelected ? 2 : 1)
+            )
+            .cornerRadius(8)
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1.0 : 0.6)
     }
 }
 
@@ -175,5 +238,5 @@ extension UTType {
 
 #Preview {
     InstallationView()
-        .environmentObject(EmbeddedWineManager())
+        .environmentObject(GamePortingToolkitManager.shared)
 }
