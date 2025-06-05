@@ -7,12 +7,33 @@
 
 import SwiftUI
 import UniformTypeIdentifiers
+@_spi(SPI) import kimiz
+
+enum InstallationError: LocalizedError {
+    case homebrewRequired
+    case gptkInstallationFailed(String)
+    case manualInstallationRequired
+
+    var errorDescription: String? {
+        switch self {
+        case .homebrewRequired:
+            return "Homebrew is required to install Game Porting Toolkit"
+        case .gptkInstallationFailed(let message):
+            return message
+        case .manualInstallationRequired:
+            return "Manual installation of Game Porting Toolkit is required"
+        }
+    }
+}
 
 struct InstallationView: View {
     @EnvironmentObject var gamePortingToolkitManager: GamePortingToolkitManager
     @State private var selectedInstallationType: InstallationType = .steam
     @State private var isInstalling = false
     @State private var showingFilePicker = false
+    @State private var installationStep = ""
+    @State private var showingAlert = false
+    @State private var alertMessage = ""
 
     enum InstallationType: String, CaseIterable {
         case steam = "Steam"
@@ -65,26 +86,29 @@ struct InstallationView: View {
                         onSelect: { selectedInstallationType = type },
                         isInstalling: isInstalling,
                         onInstall: performInstallation,
-                        isEnabled: gamePortingToolkitManager.isGPTKInstalled
+                        installationStep: installationStep
                     )
                 }
             }
             .padding(.horizontal)
 
-            if !gamePortingToolkitManager.isGPTKInstalled {
+            // Show dependencies status info (non-blocking)
+            if !gamePortingToolkitManager.isGPTKInstalled && !isInstalling {
                 VStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.orange)
-                    Text("Game Porting Toolkit is not installed")
+                    Image(systemName: "info.circle.fill")
+                        .foregroundColor(.blue)
+                    Text("Required dependencies")
                         .font(.caption)
-                        .foregroundColor(.orange)
-                    Text("Please install GPTK in Settings before installing applications")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
+                        .foregroundColor(.blue)
+                    Text(
+                        "Required dependencies will be installed automatically before running applications"
+                    )
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
                 }
                 .padding()
-                .background(Color.orange.opacity(0.1))
+                .background(Color.blue.opacity(0.1))
                 .cornerRadius(8)
                 .padding(.horizontal)
             }
@@ -98,9 +122,16 @@ struct InstallationView: View {
         ) { result in
             handleFileSelection(result)
         }
+        .alert("Installation Status", isPresented: $showingAlert) {
+            Button("OK") {}
+        } message: {
+            Text(alertMessage)
+        }
     }
 
     private func performInstallation() {
+        guard !isInstalling else { return }
+
         switch selectedInstallationType {
         case .steam:
             installSteam()
@@ -109,19 +140,102 @@ struct InstallationView: View {
         }
     }
 
+    private func ensureGPTKInstalled() async throws {
+        // Check if GPTK is already installed
+        if gamePortingToolkitManager.isGPTKInstalled {
+            return
+        }
+
+        await MainActor.run {
+            installationStep = "Checking dependencies..."
+        }
+
+        // First check if Homebrew is available
+        if !isHomebrewInstalled() {
+            throw InstallationError.homebrewRequired
+        }
+
+        // Install only dependencies without full GPTK
+        do {
+            await MainActor.run {
+                installationStep = "Installing required dependencies..."
+            }
+
+            try await gamePortingToolkitManager.installDependenciesOnly()
+
+            // The installDependenciesOnly method should have set isGPTKInstalled to true
+            if !gamePortingToolkitManager.isGPTKInstalled {
+                throw InstallationError.gptkInstallationFailed(
+                    "Dependencies installation verification failed")
+            }
+        } catch {
+            // If installation fails, provide helpful guidance
+            let errorMessage = error.localizedDescription
+            if errorMessage.contains("Homebrew") {
+                throw InstallationError.homebrewRequired
+            } else {
+                throw InstallationError.gptkInstallationFailed(
+                    "Failed to install dependencies: \(errorMessage)")
+            }
+        }
+    }
+
+    private func isHomebrewInstalled() -> Bool {
+        let homebrewPaths = [
+            "/opt/homebrew/bin/brew",  // Apple Silicon
+            "/usr/local/bin/brew",  // Intel
+        ]
+
+        return homebrewPaths.contains { path in
+            FileManager.default.fileExists(atPath: path)
+        }
+    }
+
     private func installSteam() {
         isInstalling = true
+        installationStep = "Preparing installation..."
+
         Task {
             do {
+                // First ensure GPTK is installed
+                try await ensureGPTKInstalled()
+
+                await MainActor.run {
+                    installationStep = "Installing Steam..."
+                }
+
                 try await gamePortingToolkitManager.installSteam()
+
                 await MainActor.run {
                     isInstalling = false
+                    installationStep = ""
+                    alertMessage = "Steam has been installed successfully!"
+                    showingAlert = true
+                }
+            } catch InstallationError.homebrewRequired {
+                await MainActor.run {
+                    isInstalling = false
+                    installationStep = ""
+                    alertMessage =
+                        "Homebrew is required to install Game Porting Toolkit.\n\nPlease install Homebrew from https://brew.sh and try again.\n\nAlternatively, you can install GPTK manually from Apple's Developer portal at https://developer.apple.com/games/"
+                    showingAlert = true
+                }
+            } catch InstallationError.manualInstallationRequired {
+                await MainActor.run {
+                    isInstalling = false
+                    installationStep = ""
+                    alertMessage =
+                        "Automatic installation failed. Please install Game Porting Toolkit manually from Apple's Developer portal at https://developer.apple.com/games/"
+                    showingAlert = true
                 }
             } catch {
                 await MainActor.run {
                     isInstalling = false
+                    installationStep = ""
+                    alertMessage =
+                        "Installation failed: \(error.localizedDescription)\n\nYou can try installing GPTK manually from https://developer.apple.com/games/"
+                    showingAlert = true
                 }
-                print("Failed to install Steam: \(error)")
             }
         }
     }
@@ -133,34 +247,86 @@ struct InstallationView: View {
                 installExecutable(at: url)
             }
         case .failure(let error):
-            print("File selection failed: \(error)")
+            alertMessage = "File selection failed: \(error.localizedDescription)"
+            showingAlert = true
         }
     }
 
     private func installExecutable(at url: URL) {
         isInstalling = true
+        installationStep = "Preparing installation..."
+
         Task {
             do {
+                // First ensure GPTK is installed
+                try await ensureGPTKInstalled()
+
+                await MainActor.run {
+                    installationStep = "Installing executable..."
+                }
+
                 // Copy file to a temporary location and run it
                 let fileName = url.lastPathComponent
                 let tempDir = FileManager.default.temporaryDirectory
                 let destination = tempDir.appendingPathComponent(fileName)
+
+                // Set proper permissions for the temp directory
+                try FileManager.default.createDirectory(
+                    at: tempDir, withIntermediateDirectories: true)
+
+                // Copy with proper permissions
+                if FileManager.default.fileExists(atPath: destination.path) {
+                    try FileManager.default.removeItem(at: destination)
+                }
                 try FileManager.default.copyItem(at: url, to: destination)
+
+                // Set executable permissions
+                var attributes = try FileManager.default.attributesOfItem(atPath: destination.path)
+                let currentPermissions =
+                    attributes[.posixPermissions] as? NSNumber ?? NSNumber(value: 0o644)
+                let newPermissions = currentPermissions.uint16Value | 0o755
+                try FileManager.default.setAttributes(
+                    [.posixPermissions: NSNumber(value: newPermissions)],
+                    ofItemAtPath: destination.path)
 
                 // Run the installer using GPTK
                 try await gamePortingToolkitManager.runGame(executablePath: destination.path)
 
                 await MainActor.run {
                     isInstalling = false
+                    installationStep = ""
+                    alertMessage = "Executable has been launched successfully!"
+                    showingAlert = true
                 }
 
-                // Clean up
-                try? FileManager.default.removeItem(at: destination)
+                // Clean up after a delay to allow the process to start
+                DispatchQueue.global().asyncAfter(deadline: .now() + 5) {
+                    try? FileManager.default.removeItem(at: destination)
+                }
+            } catch InstallationError.homebrewRequired {
+                await MainActor.run {
+                    isInstalling = false
+                    installationStep = ""
+                    alertMessage =
+                        "Homebrew is required to install Game Porting Toolkit.\n\nPlease install Homebrew from https://brew.sh and try again.\n\nAlternatively, you can install GPTK manually from Apple's Developer portal at https://developer.apple.com/games/"
+                    showingAlert = true
+                }
+            } catch InstallationError.manualInstallationRequired {
+                await MainActor.run {
+                    isInstalling = false
+                    installationStep = ""
+                    alertMessage =
+                        "Automatic installation failed. Please install Game Porting Toolkit manually from Apple's Developer portal at https://developer.apple.com/games/"
+                    showingAlert = true
+                }
             } catch {
                 await MainActor.run {
                     isInstalling = false
+                    installationStep = ""
+                    alertMessage =
+                        "Installation failed: \(error.localizedDescription)\n\nYou can try installing GPTK manually from https://developer.apple.com/games/"
+                    showingAlert = true
                 }
-                print("Failed to install executable: \(error)")
             }
         }
     }
@@ -172,7 +338,7 @@ struct InstallationCard: View {
     let onSelect: () -> Void
     let isInstalling: Bool
     let onInstall: () -> Void
-    let isEnabled: Bool
+    let installationStep: String
 
     var body: some View {
         Button(action: onSelect) {
@@ -191,6 +357,12 @@ struct InstallationCard: View {
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.leading)
+
+                    if isInstalling && !installationStep.isEmpty {
+                        Text(installationStep)
+                            .font(.caption)
+                            .foregroundColor(.accentColor)
+                    }
                 }
 
                 Spacer()
@@ -210,7 +382,7 @@ struct InstallationCard: View {
                         .padding(.vertical, 8)
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(isInstalling || !isEnabled)
+                    .disabled(isInstalling)
                 }
             }
             .padding()
@@ -224,8 +396,6 @@ struct InstallationCard: View {
             .cornerRadius(8)
         }
         .buttonStyle(.plain)
-        .disabled(!isEnabled)
-        .opacity(isEnabled ? 1.0 : 0.6)
     }
 }
 

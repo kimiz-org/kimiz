@@ -52,7 +52,7 @@ struct SettingsView: View {
                             await gamePortingToolkitManager.scanForGames()
                         }
                     }
-                    .disabled(!gamePortingToolkitManager.isGPTKInstalled)
+                    .disabled(!gamePortingToolkitManager.isWineOrGPTKAvailable)
                 }
 
                 // Performance Settings Section

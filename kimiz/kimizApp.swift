@@ -16,5 +16,7 @@ struct kimizApp: App {
             ContentView()
                 .environmentObject(gamePortingToolkitManager)
         }
+        .windowResizability(.contentSize)
+        .defaultSize(width: 640, height: 480)
     }
 }

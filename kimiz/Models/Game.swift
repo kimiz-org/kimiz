@@ -7,8 +7,8 @@
 
 import Foundation
 
-struct Game: Identifiable {
-    let id = UUID()
+struct Game: Identifiable, Codable {
+    let id: UUID
     let name: String
     let executablePath: String
     let installPath: String
@@ -16,9 +16,16 @@ struct Game: Identifiable {
     var isInstalled: Bool = false
     var icon: Data?
 
-    init(name: String, executablePath: String, installPath: String) {
+    init(
+        id: UUID = UUID(), name: String, executablePath: String, installPath: String,
+        lastPlayed: Date? = nil, isInstalled: Bool = false, icon: Data? = nil
+    ) {
+        self.id = id
         self.name = name
         self.executablePath = executablePath
         self.installPath = installPath
+        self.lastPlayed = lastPlayed
+        self.isInstalled = isInstalled
+        self.icon = icon
     }
 }

@@ -13,6 +13,7 @@ struct GamesLibraryView: View {
     @State private var selectedGame: Game?
     @State private var isRefreshing = false
     @State private var showGPTKStatusSheet = false
+    @State private var showingFilePicker = false
 
     var filteredGames: [Game] {
         if searchText.isEmpty {
@@ -63,7 +64,7 @@ struct GamesLibraryView: View {
                         .disabled(!gamePortingToolkitManager.isGPTKInstalled)
 
                         Button("Add Game Executable") {
-                            // Open file picker to add a game
+                            showingFilePicker = true
                         }
                         .disabled(!gamePortingToolkitManager.isGPTKInstalled)
 
@@ -123,6 +124,13 @@ struct GamesLibraryView: View {
         }
         .task {
             await gamePortingToolkitManager.scanForGames()
+        }
+        .fileImporter(
+            isPresented: $showingFilePicker,
+            allowedContentTypes: [.exe],
+            allowsMultipleSelection: false
+        ) { result in
+            handleFileSelection(result)
         }
     }
 
@@ -187,11 +195,13 @@ struct GamesLibraryView: View {
                     installSteam()
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(isRefreshing)
 
                 Button("Add Windows Game") {
-                    // Show file picker to select Windows executable
+                    showingFilePicker = true
                 }
                 .buttonStyle(.bordered)
+                .disabled(isRefreshing)
             } else {
                 Button("Setup GPTK") {
                     showGPTKStatusSheet = true
@@ -224,16 +234,16 @@ struct GamesLibraryView: View {
     }
 
     private func installSteam() {
+        isRefreshing = true
         Task {
             do {
                 try await gamePortingToolkitManager.installSteam()
-
-                // Refresh games after Steam installation
                 await gamePortingToolkitManager.scanForGames()
             } catch {
-                // Handle error installing Steam
+                // Optionally show an alert to the user
                 print("Error installing Steam: \(error)")
             }
+            isRefreshing = false
         }
     }
 
@@ -278,6 +288,43 @@ struct GamesLibraryView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(Color.blue.opacity(0.8))
+    }
+
+    // MARK: - File Handling
+    private func handleFileSelection(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            if let url = urls.first {
+                installGameExecutable(at: url)
+            }
+        case .failure(let error):
+            // Optionally show an alert
+            print("File selection failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func installGameExecutable(at url: URL) {
+        Task {
+            do {
+                // Copy the .exe to a temp location
+                let tempDir = FileManager.default.temporaryDirectory
+                let destination = tempDir.appendingPathComponent(url.lastPathComponent)
+                if FileManager.default.fileExists(atPath: destination.path) {
+                    try FileManager.default.removeItem(at: destination)
+                }
+                try FileManager.default.copyItem(at: url, to: destination)
+
+                // Add the game to the installedGames list and persist it
+                let newGame = Game(
+                    name: url.deletingPathExtension().lastPathComponent,
+                    executablePath: destination.path,
+                    installPath: url.deletingLastPathComponent().path
+                )
+                await gamePortingToolkitManager.addUserGame(newGame)
+            } catch {
+                print("Failed to add game: \(error)")
+            }
+        }
     }
 }
 

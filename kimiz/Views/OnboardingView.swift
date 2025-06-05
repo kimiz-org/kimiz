@@ -75,6 +75,12 @@ struct OnboardingView: View {
                 checkInitialStateAndSetup()
                 hasCheckedInitialState = true
             }
+            // Automatically create a default bottle if none exists
+            if gamePortingToolkitManager.bottles.isEmpty {
+                Task {
+                    await gamePortingToolkitManager.createBottle(name: "MyBottle")
+                }
+            }
         }
     }
 
@@ -224,14 +230,28 @@ struct OnboardingView: View {
                         .font(.system(size: 28, weight: .semibold, design: .rounded))
                         .foregroundColor(.white)
 
-                    Text("Game Porting Toolkit is required to run Windows games on your Mac.")
-                        .font(.system(size: 16))
-                        .foregroundColor(.white.opacity(0.8))
-                        .multilineTextAlignment(.center)
+                    Text(
+                        "Game Porting Toolkit or Wine is required to run Windows games on your Mac.\nYou must also create at least one bottle to continue."
+                    )
+                    .font(.system(size: 16))
+                    .foregroundColor(.white.opacity(0.8))
+                    .multilineTextAlignment(.center)
                 }
             }
 
             VStack(spacing: 12) {
+                Button("Create New Bottle") {
+                    Task {
+                        await gamePortingToolkitManager.createBottle(name: "MyBottle")
+                    }
+                }
+                .buttonStyle(ModernButtonStyle(color: Color.purple))
+
+                Button("Install Wine and Dependencies") {
+                    installWineAndDependencies()
+                }
+                .buttonStyle(ModernButtonStyle(color: Color.green))
+
                 Button("Install Game Porting Toolkit") {
                     startInstallation()
                 }
@@ -246,6 +266,27 @@ struct OnboardingView: View {
                 }
                 .buttonStyle(ModernButtonStyle(color: Color.gray, style: .secondary))
             }
+            if !gamePortingToolkitManager.bottles.isEmpty {
+                VStack(spacing: 8) {
+                    Text("Your Bottles:")
+                        .font(.headline)
+                        .foregroundColor(.white.opacity(0.8))
+                    ForEach(gamePortingToolkitManager.bottles) { bottle in
+                        HStack {
+                            Text(bottle.name)
+                                .foregroundColor(.white)
+                            Spacer()
+                            Text(bottle.path)
+                                .font(.caption2)
+                                .foregroundColor(.gray)
+                        }
+                        .padding(6)
+                        .background(Color.white.opacity(0.05))
+                        .cornerRadius(8)
+                    }
+                }
+                .frame(maxWidth: 400)
+            }
         }
         .frame(maxWidth: 400)
         .padding(.vertical, 28)
@@ -254,11 +295,17 @@ struct OnboardingView: View {
 
     // MARK: - Actions
     private func checkInitialStateAndSetup() {
-        if gamePortingToolkitManager.isGPTKInstalled {
-            // GPTK is already installed, close onboarding
+        // Only pass onboarding if at least one bottle exists AND Wine/GPTK is available
+        if !gamePortingToolkitManager.bottles.isEmpty
+            && (gamePortingToolkitManager.isWineOrGPTKAvailable
+                || gamePortingToolkitManager.isGPTKInstalled)
+        {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 completeOnboarding()
             }
+        } else {
+            // Force onboarding to stay open
+            showOnboarding = true
         }
     }
 
@@ -305,6 +352,34 @@ struct OnboardingView: View {
                     isInstalling = false
                     installationError =
                         "Rosetta 2 is required on Apple Silicon Macs. Please run: softwareupdate --install-rosetta"
+                }
+            } catch {
+                await MainActor.run {
+                    gamePortingToolkitManager.isInstallingComponents = false
+                    isInstalling = false
+                    installationError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func installWineAndDependencies() {
+        installationError = nil
+        isInstalling = true
+        Task {
+            do {
+                await MainActor.run {
+                    gamePortingToolkitManager.isInstallingComponents = true
+                    gamePortingToolkitManager.installationProgress = 0.1
+                    gamePortingToolkitManager.installationStatus = "Starting Wine installation..."
+                }
+                try await gamePortingToolkitManager.installWineAndDependencies()
+                await gamePortingToolkitManager.checkGPTKInstallation()
+                await MainActor.run {
+                    gamePortingToolkitManager.isInstallingComponents = false
+                    gamePortingToolkitManager.installationProgress = 1.0
+                    gamePortingToolkitManager.installationStatus = "Wine and dependencies installed"
+                    isInstalling = false
                 }
             } catch {
                 await MainActor.run {
