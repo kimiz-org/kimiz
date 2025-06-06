@@ -7,7 +7,6 @@
 
 import SwiftUI
 import UniformTypeIdentifiers
-@_spi(SPI) import kimiz
 
 enum InstallationError: LocalizedError {
     case homebrewRequired
@@ -28,21 +27,27 @@ enum InstallationError: LocalizedError {
 
 struct InstallationView: View {
     @EnvironmentObject var gamePortingToolkitManager: GamePortingToolkitManager
+    @EnvironmentObject var epicGamesManager: EpicGamesManager
     @State private var selectedInstallationType: InstallationType = .steam
     @State private var isInstalling = false
     @State private var showingFilePicker = false
+    @State private var showingEpicConnection = false
     @State private var installationStep = ""
     @State private var showingAlert = false
     @State private var alertMessage = ""
 
     enum InstallationType: String, CaseIterable {
         case steam = "Steam"
+        case epicGames = "Epic Games"
         case executable = "Windows Executable"
 
         var description: String {
             switch self {
             case .steam:
                 return "Install Steam client to access your game library using Game Porting Toolkit"
+            case .epicGames:
+                return
+                    "Connect your Epic Games account to access and install your Epic games library"
             case .executable:
                 return "Install a Windows .exe application or game using Game Porting Toolkit"
             }
@@ -52,6 +57,8 @@ struct InstallationView: View {
             switch self {
             case .steam:
                 return "cloud.fill"
+            case .epicGames:
+                return "gamecontroller.fill"
             case .executable:
                 return "app.badge"
             }
@@ -59,61 +66,49 @@ struct InstallationView: View {
     }
 
     var body: some View {
-        VStack(spacing: 24) {
-            // Header
-            VStack(spacing: 8) {
-                Image(systemName: "square.and.arrow.down")
-                    .font(.system(size: 48))
-                    .foregroundColor(.accentColor)
+        ZStack {
+            // Modern gradient background
+            LinearGradient(
+                colors: [
+                    Color(red: 0.08, green: 0.08, blue: 0.12),
+                    Color(red: 0.12, green: 0.12, blue: 0.16),
+                    Color(red: 0.16, green: 0.12, blue: 0.20),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
 
-                Text("Install Applications")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
+            ScrollView {
+                VStack(spacing: 32) {
+                    // Modern Header
+                    modernHeaderView
 
-                Text("Install Windows games and applications using Apple's Game Porting Toolkit")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-            .padding(.top)
+                    // Installation Cards
+                    LazyVStack(spacing: 20) {
+                        ForEach(InstallationType.allCases, id: \.self) { type in
+                            ModernInstallationCard(
+                                type: type,
+                                isSelected: selectedInstallationType == type,
+                                onSelect: { selectedInstallationType = type },
+                                isInstalling: isInstalling,
+                                onInstall: performInstallation,
+                                installationStep: installationStep,
+                                epicGamesManager: epicGamesManager
+                            )
+                        }
+                    }
+                    .padding(.horizontal, 24)
 
-            // Installation type cards
-            VStack(spacing: 16) {
-                ForEach(InstallationType.allCases, id: \.self) { type in
-                    InstallationCard(
-                        type: type,
-                        isSelected: selectedInstallationType == type,
-                        onSelect: { selectedInstallationType = type },
-                        isInstalling: isInstalling,
-                        onInstall: performInstallation,
-                        installationStep: installationStep
-                    )
+                    // Dependencies Info
+                    if !gamePortingToolkitManager.isGPTKInstalled && !isInstalling {
+                        dependenciesInfoView
+                    }
+
+                    Spacer(minLength: 20)
                 }
+                .padding(.vertical, 20)
             }
-            .padding(.horizontal)
-
-            // Show dependencies status info (non-blocking)
-            if !gamePortingToolkitManager.isGPTKInstalled && !isInstalling {
-                VStack(spacing: 8) {
-                    Image(systemName: "info.circle.fill")
-                        .foregroundColor(.blue)
-                    Text("Required dependencies")
-                        .font(.caption)
-                        .foregroundColor(.blue)
-                    Text(
-                        "Required dependencies will be installed automatically before running applications"
-                    )
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                }
-                .padding()
-                .background(Color.blue.opacity(0.1))
-                .cornerRadius(8)
-                .padding(.horizontal)
-            }
-
-            Spacer()
         }
         .fileImporter(
             isPresented: $showingFilePicker,
@@ -122,11 +117,85 @@ struct InstallationView: View {
         ) { result in
             handleFileSelection(result)
         }
+        .sheet(isPresented: $showingEpicConnection) {
+            EpicGamesConnectionView(isPresented: $showingEpicConnection)
+                .environmentObject(epicGamesManager)
+        }
         .alert("Installation Status", isPresented: $showingAlert) {
             Button("OK") {}
         } message: {
             Text(alertMessage)
         }
+    }
+
+    private var modernHeaderView: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [.cyan, .blue, .purple],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 60, height: 60)
+                    .overlay(
+                        Image(systemName: "square.and.arrow.down")
+                            .font(.system(size: 24, weight: .medium))
+                            .foregroundColor(.white)
+                    )
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Install Applications")
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [.white, .white.opacity(0.8)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+
+                    Text("Add Windows games and applications to your library")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white.opacity(0.7))
+                }
+
+                Spacer()
+            }
+            .padding(.horizontal, 24)
+        }
+    }
+
+    private var dependenciesInfoView: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Image(systemName: "info.circle.fill")
+                    .foregroundColor(.cyan)
+                    .font(.title3)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Dependencies Required")
+                        .font(.headline)
+                        .foregroundColor(.white)
+
+                    Text("Required dependencies will be installed automatically when needed")
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.8))
+                }
+
+                Spacer()
+            }
+        }
+        .padding(16)
+        .background(.ultraThinMaterial)
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.cyan.opacity(0.3), lineWidth: 1)
+        )
+        .padding(.horizontal, 24)
     }
 
     private func performInstallation() {
@@ -135,6 +204,8 @@ struct InstallationView: View {
         switch selectedInstallationType {
         case .steam:
             installSteam()
+        case .epicGames:
+            showingEpicConnection = true
         case .executable:
             showingFilePicker = true
         }
@@ -332,6 +403,185 @@ struct InstallationView: View {
     }
 }
 
+struct ModernInstallationCard: View {
+    let type: InstallationView.InstallationType
+    let isSelected: Bool
+    let onSelect: () -> Void
+    let isInstalling: Bool
+    let onInstall: () -> Void
+    let installationStep: String
+    let epicGamesManager: EpicGamesManager
+
+    var body: some View {
+        Button(action: onSelect) {
+            VStack(spacing: 0) {
+                // Card Content
+                HStack(spacing: 16) {
+                    // Icon
+                    ZStack {
+                        Circle()
+                            .fill(
+                                isSelected
+                                    ? LinearGradient(
+                                        colors: [.cyan, .blue],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                    : LinearGradient(
+                                        colors: [.gray.opacity(0.3), .gray.opacity(0.2)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                            )
+                            .frame(width: 50, height: 50)
+
+                        Image(systemName: type.icon)
+                            .font(.system(size: 20, weight: .medium))
+                            .foregroundColor(isSelected ? .white : .white.opacity(0.7))
+                    }
+
+                    // Content
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(type.rawValue)
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.white)
+
+                            Spacer()
+
+                            if type == .epicGames && epicGamesManager.isConnected {
+                                HStack(spacing: 4) {
+                                    Circle()
+                                        .fill(.green)
+                                        .frame(width: 8, height: 8)
+                                    Text("Connected")
+                                        .font(.caption)
+                                        .foregroundColor(.green)
+                                }
+                            }
+                        }
+
+                        Text(type.description)
+                            .font(.system(size: 14))
+                            .foregroundColor(.white.opacity(0.8))
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        if isSelected && isInstalling && !installationStep.isEmpty {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .tint(.cyan)
+                                Text(installationStep)
+                                    .font(.caption)
+                                    .foregroundColor(.cyan)
+                            }
+                            .padding(.top, 4)
+                        }
+                    }
+
+                    Spacer()
+                }
+                .padding(20)
+
+                // Action Button
+                if isSelected {
+                    Divider()
+                        .background(.white.opacity(0.1))
+
+                    HStack {
+                        Spacer()
+
+                        Button(action: onInstall) {
+                            HStack(spacing: 8) {
+                                if isInstalling {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                        .tint(.white)
+                                    Text("Installing...")
+                                } else {
+                                    Image(systemName: getActionIcon())
+                                    Text(getActionText())
+                                }
+                            }
+                            .foregroundColor(.white)
+                            .font(.system(size: 14, weight: .medium))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                        }
+                        .background(
+                            LinearGradient(
+                                colors: [.cyan, .blue],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .cornerRadius(8)
+                        .disabled(isInstalling)
+
+                        Spacer()
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 16)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(
+                            isSelected
+                                ? LinearGradient(
+                                    colors: [.cyan, .blue],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                                : LinearGradient(
+                                    colors: [.white.opacity(0.1), .white.opacity(0.05)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                            lineWidth: 2
+                        )
+                )
+        )
+        .scaleEffect(isSelected ? 1.02 : 1.0)
+        .shadow(
+            color: isSelected ? .cyan.opacity(0.3) : .black.opacity(0.1),
+            radius: isSelected ? 12 : 4,
+            x: 0,
+            y: isSelected ? 6 : 2
+        )
+        .animation(.easeInOut(duration: 0.2), value: isSelected)
+    }
+
+    private func getActionIcon() -> String {
+        switch type {
+        case .steam:
+            return "cloud.fill"
+        case .epicGames:
+            return epicGamesManager.isConnected ? "gamecontroller.fill" : "link"
+        case .executable:
+            return "folder"
+        }
+    }
+
+    private func getActionText() -> String {
+        switch type {
+        case .steam:
+            return "Install Steam"
+        case .epicGames:
+            return epicGamesManager.isConnected ? "View Library" : "Connect Account"
+        case .executable:
+            return "Choose File"
+        }
+    }
+}
+
+// Keep the old InstallationCard for compatibility but mark it as deprecated
 struct InstallationCard: View {
     let type: InstallationView.InstallationType
     let isSelected: Bool
@@ -409,4 +659,5 @@ extension UTType {
 #Preview {
     InstallationView()
         .environmentObject(GamePortingToolkitManager.shared)
+        .environmentObject(EpicGamesManager.shared)
 }

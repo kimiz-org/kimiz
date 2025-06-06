@@ -161,6 +161,7 @@ struct SettingsView: View {
             .navigationTitle("Settings")
             .formStyle(.grouped)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func resetSettings() {

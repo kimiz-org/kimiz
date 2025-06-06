@@ -9,11 +9,13 @@ import SwiftUI
 
 struct GamesLibraryView: View {
     @EnvironmentObject var gamePortingToolkitManager: GamePortingToolkitManager
+    @EnvironmentObject var epicGamesManager: EpicGamesManager
     @State private var searchText = ""
     @State private var selectedGame: Game?
     @State private var isRefreshing = false
     @State private var showGPTKStatusSheet = false
     @State private var showingFilePicker = false
+    @State private var showingEpicConnection = false
 
     var filteredGames: [Game] {
         if searchText.isEmpty {
@@ -49,33 +51,111 @@ struct GamesLibraryView: View {
             }
             .navigationTitle("Games")
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
+                ToolbarItemGroup(placement: .primaryAction) {
+                    // Epic Games Connect Button
+                    Button {
+                        showingEpicConnection = true
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "link")
+                                .font(.system(size: 12, weight: .medium))
+                            Text("Epic")
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            LinearGradient(
+                                colors: [Color.purple, Color.blue],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .cornerRadius(8)
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(!gamePortingToolkitManager.isGPTKInstalled)
+                    .help("Connect Epic Games Account")
+
+                    // Modern Install Menu
                     Menu {
-                        Button("Refresh Game List") {
-                            refreshGames()
+                        Section("Install Platform") {
+                            Button {
+                                installSteam()
+                            } label: {
+                                Label("Steam Client", systemImage: "cloud.fill")
+                            }
+                            .disabled(!gamePortingToolkitManager.isGPTKInstalled || isRefreshing)
+
+                            Button {
+                                showingEpicConnection = true
+                            } label: {
+                                Label("Epic Games Store", systemImage: "gamecontroller.fill")
+                            }
+                            .disabled(!gamePortingToolkitManager.isGPTKInstalled)
                         }
-                        .disabled(isRefreshing)
+
+                        Section("Add Games") {
+                            Button {
+                                showingFilePicker = true
+                            } label: {
+                                Label("Windows Executable", systemImage: "app.badge")
+                            }
+                            .disabled(!gamePortingToolkitManager.isGPTKInstalled)
+                        }
 
                         Divider()
 
-                        Button("Install Steam") {
-                            installSteam()
+                        Section("Library") {
+                            Button {
+                                refreshGames()
+                            } label: {
+                                Label(
+                                    "Refresh Game List",
+                                    systemImage: isRefreshing
+                                        ? "arrow.clockwise" : "arrow.clockwise")
+                            }
+                            .disabled(isRefreshing)
                         }
-                        .disabled(!gamePortingToolkitManager.isGPTKInstalled)
 
-                        Button("Add Game Executable") {
-                            showingFilePicker = true
-                        }
-                        .disabled(!gamePortingToolkitManager.isGPTKInstalled)
-
-                        Divider()
-
-                        Button("GPTK Status") {
-                            showGPTKStatusSheet = true
+                        Section("System") {
+                            Button {
+                                showGPTKStatusSheet = true
+                            } label: {
+                                Label(
+                                    "GPTK Status",
+                                    systemImage: gamePortingToolkitManager.isGPTKInstalled
+                                        ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                            }
                         }
                     } label: {
-                        Label("Actions", systemImage: "ellipsis.circle")
+                        HStack(spacing: 6) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 14, weight: .medium))
+                            Text("Install")
+                                .font(.system(size: 13, weight: .medium))
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 10, weight: .medium))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(
+                            LinearGradient(
+                                colors: [Color.cyan, Color.blue],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .cornerRadius(10)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                        )
                     }
+                    .buttonStyle(.borderless)
+                    .menuStyle(.borderlessButton)
                 }
             }
             .sheet(isPresented: $showGPTKStatusSheet) {
@@ -131,6 +211,10 @@ struct GamesLibraryView: View {
             allowsMultipleSelection: false
         ) { result in
             handleFileSelection(result)
+        }
+        .sheet(isPresented: $showingEpicConnection) {
+            EpicGamesConnectionView(isPresented: $showingEpicConnection)
+                .environmentObject(epicGamesManager)
         }
     }
 
