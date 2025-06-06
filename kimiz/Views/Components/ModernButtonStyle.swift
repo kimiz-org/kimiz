@@ -2,7 +2,7 @@
 //  ModernButtonStyle.swift
 //  kimiz
 //
-//  Created by GitHub Copilot
+//  Created by temidaradev
 //
 
 import SwiftUI

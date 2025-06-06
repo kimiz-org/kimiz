@@ -1,3 +1,10 @@
+//
+//  EpicGamesManager.swift
+//  kimiz
+//
+//  Created by temidaradev on 6.06.2025.
+//
+
 import Foundation
 import os.log
 

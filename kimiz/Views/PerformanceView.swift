@@ -2,7 +2,7 @@
 //  PerformanceView.swift
 //  kimiz
 //
-//  Created by GitHub Copilot on 6.06.2025.
+//  Created by temidaradev on 6.06.2025.
 //
 
 import SwiftUI

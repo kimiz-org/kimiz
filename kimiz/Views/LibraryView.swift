@@ -2,7 +2,7 @@
 //  LibraryView.swift
 //  kimiz
 //
-//  Created by GitHub Copilot on 5.06.2025.
+//  Created by temidaradev on 5.06.2025.
 //
 
 import AppKit
