@@ -1,2 +1,13 @@
 build
 .DS_Store
+
+# Xcode user-specific files
+*.xcuserdata
+DerivedData/
+*.hmap
+*.ipa
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride

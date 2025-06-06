@@ -9,10 +9,6 @@ import AppKit
 import Foundation
 import SwiftUI
 
-// Explicitly import the managers and views if needed
-// If these types are in subfolders but the same target, no import is needed
-// If using a module, use: import kimiz
-
 struct ContentView: View {
     @EnvironmentObject var gamePortingToolkitManager: GamePortingToolkitManager
     @EnvironmentObject var epicGamesManager: EpicGamesManager
@@ -70,62 +66,114 @@ struct ContentView: View {
 
                 // Tab content with modern styling
                 modernTabView
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var modernHeader: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("kimiz")
-                    .font(.system(size: 28, weight: .ultraLight, design: .rounded))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [.white, .white.opacity(0.8)],
-                            startPoint: .leading,
-                            endPoint: .trailing
+        HStack(spacing: 16) {
+            // Enhanced branding section
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    // App logo with enhanced styling
+                    ZStack {
+                        // Background glow effect
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.2)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 30, height: 30)
+                            .blur(radius: 3)
+
+                        // Logo with modern styling
+                        Image("AppLogo")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 24, height: 24)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(
+                                        LinearGradient(
+                                            colors: [
+                                                Color.white.opacity(0.3), Color.white.opacity(0.1),
+                                            ],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        ),
+                                        lineWidth: 1
+                                    )
+                            )
+                    }
+                    .shadow(color: .black.opacity(0.3), radius: 6, x: 0, y: 3)
+
+                    Text("kimiz")
+                        .font(.system(size: 24, weight: .thin, design: .rounded))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [.white, .white.opacity(0.9), .blue.opacity(0.7)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
                         )
-                    )
+                        .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
+                }
 
                 Text("Windows Gaming on Mac")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.white.opacity(0.6))
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .foregroundColor(.white.opacity(0.7))
+                    .tracking(0.3)
             }
 
             Spacer()
 
-            // Modern Install Menu in Header
+            // Enhanced action buttons with better spacing and hierarchy
             HStack(spacing: 12) {
-                // Epic Games Quick Connect Button
+                // Epic Games Quick Connect Button with enhanced styling
                 Button {
-                    showingEpicConnection = true
+                    if gamePortingToolkitManager.isGPTKInstalled {
+                        showingEpicConnection = true
+                    }
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "gamecontroller.fill")
-                            .font(.system(size: 12, weight: .medium))
-                        Text("Epic")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.system(size: 11, weight: .semibold))
+                        Text("Epic Games")
+                            .font(.system(size: 11, weight: .semibold))
                     }
                     .foregroundColor(.white)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .background(
                         LinearGradient(
-                            colors: [Color.purple.opacity(0.8), Color.blue.opacity(0.8)],
-                            startPoint: .leading,
-                            endPoint: .trailing
+                            colors: gamePortingToolkitManager.isGPTKInstalled
+                                ? [Color.purple.opacity(0.9), Color.pink.opacity(0.8)]
+                                : [Color.gray.opacity(0.6), Color.gray.opacity(0.4)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
                         )
                     )
-                    .cornerRadius(8)
+                    .clipShape(Capsule())
                     .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                        Capsule()
+                            .stroke(Color.white.opacity(0.25), lineWidth: 1)
+                    )
+                    .shadow(
+                        color: gamePortingToolkitManager.isGPTKInstalled
+                            ? .purple.opacity(0.4)
+                            : .clear,
+                        radius: 8, x: 0, y: 3
                     )
                 }
-                .buttonStyle(.borderless)
-                .disabled(!gamePortingToolkitManager.isGPTKInstalled)
+                .buttonStyle(.plain)  // Remove default button styling
 
-                // Quick Install Menu
+                // Enhanced Quick Install Menu with better visual hierarchy
                 Menu {
                     Section("Quick Install") {
                         Button {
@@ -155,53 +203,106 @@ struct ContentView: View {
                         Label("View All Options", systemImage: "arrow.right.circle")
                     }
                 } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 12, weight: .medium))
+                    HStack(spacing: 5) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 11, weight: .semibold))
                         Text("Install")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.system(size: 11, weight: .semibold))
                         Image(systemName: "chevron.down")
                             .font(.system(size: 8, weight: .medium))
                     }
                     .foregroundColor(.white)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
-                    .background(.ultraThinMaterial)
-                    .cornerRadius(8)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                    .background(
+                        LinearGradient(
+                            colors: [Color.blue.opacity(0.8), Color.cyan.opacity(0.7)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
                     )
+                    .clipShape(Capsule())
+                    .overlay(
+                        Capsule()
+                            .stroke(Color.white.opacity(0.25), lineWidth: 1)
+                    )
+                    .shadow(color: .blue.opacity(0.4), radius: 8, x: 0, y: 3)
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)  // Remove default button styling
                 .menuStyle(.borderlessButton)
 
-                // GPTK Status indicator
+                // Enhanced GPTK Status indicator with better visual feedback
                 HStack(spacing: 8) {
-                    Circle()
-                        .fill(gamePortingToolkitManager.isGPTKInstalled ? .green : .orange)
-                        .frame(width: 8, height: 8)
+                    ZStack {
+                        Circle()
+                            .fill(
+                                gamePortingToolkitManager.isGPTKInstalled
+                                    ? .green.opacity(0.2) : .orange.opacity(0.2)
+                            )
+                            .frame(width: 16, height: 16)
 
-                    Text(
-                        gamePortingToolkitManager.isGPTKInstalled
-                            ? "GPTK Ready" : "GPTK Setup Required"
-                    )
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(.white.opacity(0.8))
+                        Circle()
+                            .fill(gamePortingToolkitManager.isGPTKInstalled ? .green : .orange)
+                            .frame(width: 8, height: 8)
+                            .shadow(
+                                color: gamePortingToolkitManager.isGPTKInstalled
+                                    ? .green.opacity(0.6) : .orange.opacity(0.6),
+                                radius: 3, x: 0, y: 0)
+                    }
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("GPTK")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.9))
+
+                        Text(gamePortingToolkitManager.isGPTKInstalled ? "Ready" : "Setup Required")
+                            .font(.system(size: 8, weight: .medium))
+                            .foregroundColor(.white.opacity(0.6))
+                    }
                 }
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .background(.ultraThinMaterial)
-                .cornerRadius(12)
+                .background(.ultraThinMaterial.opacity(0.8))
+                .clipShape(Capsule())
+                .overlay(
+                    Capsule()
+                        .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                )
             }
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 16)
-        .background(.ultraThinMaterial.opacity(0.3))
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(
+            ZStack {
+                // Enhanced background with subtle pattern
+                LinearGradient(
+                    colors: [
+                        Color.black.opacity(0.3),
+                        Color.black.opacity(0.2),
+                        Color.purple.opacity(0.1),
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+
+                // Subtle noise texture effect - reduced opacity to prevent interference
+                Rectangle()
+                    .fill(.ultraThinMaterial.opacity(0.2))
+                    .blendMode(.overlay)
+            }
+        )
         .overlay(
-            Rectangle()
-                .frame(height: 1)
-                .foregroundColor(.white.opacity(0.1)),
+            // Enhanced bottom border with gradient
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.0),
+                    Color.white.opacity(0.2),
+                    Color.white.opacity(0.0),
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .frame(height: 1),
             alignment: .bottom
         )
         .sheet(isPresented: $showingEpicConnection) {
@@ -216,30 +317,60 @@ struct ContentView: View {
                 .environmentObject(gamePortingToolkitManager)
                 .environmentObject(epicGamesManager)
                 .tabItem {
-                    Image(systemName: selectedTab == 0 ? "books.vertical.fill" : "books.vertical")
-                    Text("Library")
+                    VStack(spacing: 4) {
+                        Image(
+                            systemName: selectedTab == 0 ? "books.vertical.fill" : "books.vertical"
+                        )
+                        .font(.system(size: 16, weight: .medium))
+                        Text("Library")
+                            .font(.system(size: 11, weight: .medium))
+                    }
                 }
                 .tag(0)
 
-            InstallationView()
+            ToolsView()
                 .environmentObject(gamePortingToolkitManager)
                 .environmentObject(epicGamesManager)
                 .tabItem {
-                    Image(systemName: selectedTab == 1 ? "plus.circle.fill" : "plus.circle")
-                    Text("Install")
+                    VStack(spacing: 4) {
+                        Image(
+                            systemName: selectedTab == 1
+                                ? "wrench.and.screwdriver.fill" : "wrench.and.screwdriver"
+                        )
+                        .font(.system(size: 16, weight: .medium))
+                        Text("Tools")
+                            .font(.system(size: 11, weight: .medium))
+                    }
                 }
                 .tag(1)
+
+            PerformanceView()
+                .environmentObject(gamePortingToolkitManager)
+                .tabItem {
+                    VStack(spacing: 4) {
+                        Image(systemName: selectedTab == 2 ? "speedometer.fill" : "speedometer")
+                            .font(.system(size: 16, weight: .medium))
+                        Text("Performance")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                }
+                .tag(2)
 
             SettingsView()
                 .environmentObject(gamePortingToolkitManager)
                 .tabItem {
-                    Image(systemName: selectedTab == 2 ? "gear.circle.fill" : "gear.circle")
-                    Text("Settings")
+                    VStack(spacing: 4) {
+                        Image(systemName: selectedTab == 3 ? "gear.circle.fill" : "gear.circle")
+                            .font(.system(size: 16, weight: .medium))
+                        Text("Settings")
+                            .font(.system(size: 11, weight: .medium))
+                    }
                 }
-                .tag(2)
+                .tag(3)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.clear)
+        .accentColor(.blue)
     }
 
     // Keep original mainInterface for fallback

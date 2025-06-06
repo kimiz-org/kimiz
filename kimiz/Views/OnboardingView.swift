@@ -335,7 +335,7 @@ struct OnboardingView: View {
                     gamePortingToolkitManager.installationStatus = "Installation complete"
                     isInstalling = false
                 }
-            } catch GPTKError.homebrewRequired {
+            } catch GamePortingToolkitManager.GPTKError.homebrewRequired {
                 await MainActor.run {
                     gamePortingToolkitManager.isInstallingComponents = false
                     isInstalling = false
@@ -345,7 +345,7 @@ struct OnboardingView: View {
                         NSWorkspace.shared.open(url)
                     }
                 }
-            } catch GPTKError.rosettaRequired {
+            } catch GamePortingToolkitManager.GPTKError.rosettaRequired {
                 await MainActor.run {
                     gamePortingToolkitManager.isInstallingComponents = false
                     isInstalling = false

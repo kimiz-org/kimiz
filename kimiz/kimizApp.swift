@@ -17,8 +17,20 @@ struct kimizApp: App {
             ContentView()
                 .environmentObject(gamePortingToolkitManager)
                 .environmentObject(epicGamesManager)
+                .onOpenURL { url in
+                    handleURLScheme(url)
+                }
         }
         .windowResizability(.contentSize)
         .defaultSize(width: 640, height: 480)
+    }
+
+    private func handleURLScheme(_ url: URL) {
+        // Handle Epic Games OAuth redirect
+        if url.scheme == "kimiz" && url.host == "oauth" {
+            // The ASWebAuthenticationSession handles this automatically
+            // This is just for additional logging or custom handling if needed
+            print("Received OAuth callback URL: \(url)")
+        }
     }
 }

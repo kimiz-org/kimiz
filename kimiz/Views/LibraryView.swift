@@ -190,7 +190,7 @@ struct LibraryView: View {
                         .font(.system(size: 28, weight: .bold, design: .rounded))
                         .multilineTextAlignment(.center)
 
-                    Text("Add Windows games and start your gaming adventure on Mac")
+                    Text("Add Windows games and run them with Game Porting Toolkit on Mac")
                         .font(.system(size: 16, weight: .medium))
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)

@@ -1,23 +1,27 @@
 import Foundation
 import os.log
 
-// Wine-specific error types
+// Game Porting Toolkit-specific error types
 enum WineError: LocalizedError {
     case resourceLimitExceeded
     case highCPUUsage(Double)
     case processTimeout
     case initializationFailed
+    case gptkNotFound
 
     var errorDescription: String? {
         switch self {
         case .resourceLimitExceeded:
-            return "Too many Wine processes running simultaneously"
+            return "Too many Game Porting Toolkit processes running simultaneously"
         case .highCPUUsage(let usage):
             return "System CPU usage too high (\(String(format: "%.1f", usage))%)"
         case .processTimeout:
-            return "Wine process timed out"
+            return "Game Porting Toolkit process timed out"
         case .initializationFailed:
-            return "Failed to initialize Wine process"
+            return "Failed to initialize Game Porting Toolkit process"
+        case .gptkNotFound:
+            return
+                "Game Porting Toolkit not found. Please install GPTK using Homebrew: brew install apple/apple/game-porting-toolkit"
         }
     }
 }
@@ -30,9 +34,9 @@ actor WineManager {
     ).expandingTildeInPath
 
     // Performance monitoring
-    private let logger = Logger(subsystem: "dev.kimiz.winemanager", category: "performance")
+    private let logger = Logger(subsystem: "dev.kimiz.gptkmanager", category: "performance")
     private var activeProcesses: Set<Int32> = []
-    private let processQueue = DispatchQueue(label: "wine.process.management", qos: .userInitiated)
+    private let processQueue = DispatchQueue(label: "gptk.process.management", qos: .userInitiated)
 
     // Process timeout and resource limits
     private let processTimeout: TimeInterval = 300.0  // 5 minutes max
@@ -512,6 +516,9 @@ actor WineManager {
     private func throttleProcess(pid: Int32) async {
         await withCheckedContinuation { continuation in
             processQueue.async {
+                // Use standard throttling approach for all processes
+
+                // Use standard throttling approach for all processes
                 // Suspend process briefly to reduce CPU usage
                 kill(pid, SIGSTOP)
 
@@ -519,8 +526,9 @@ actor WineManager {
                 DispatchQueue.global().asyncAfter(deadline: .now() + 0.1) {
                     kill(pid, SIGCONT)
                     self.logger.info("Throttled process PID \(pid)")
-                    continuation.resume()
                 }
+
+                continuation.resume()
             }
         }
     }
@@ -582,7 +590,7 @@ actor WineManager {
         return await withCheckedContinuation { continuation in
             let task = Process()
             task.launchPath = "/usr/bin/pgrep"
-            task.arguments = ["-f", "wine"]
+            task.arguments = ["-f", "(wine|gptk)"]  // Look for both wine and gptk processes
 
             let pipe = Pipe()
             task.standardOutput = pipe
@@ -671,9 +679,9 @@ actor WineManager {
         return nil
     }
 
-    /// Emergency cleanup of all Wine processes
+    /// Emergency cleanup of all Game Porting Toolkit processes
     func emergencyCleanup() async {
-        logger.warning("Performing emergency cleanup of all Wine processes")
+        logger.warning("Performing emergency cleanup of all Game Porting Toolkit processes")
 
         let allWineProcesses = await getWineProcesses()
         for process in allWineProcesses {

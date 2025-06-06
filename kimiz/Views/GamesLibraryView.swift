@@ -281,7 +281,7 @@ struct GamesLibraryView: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(isRefreshing)
 
-                Button("Add Windows Game") {
+                Button("Add Windows Game using GPTK") {
                     showingFilePicker = true
                 }
                 .buttonStyle(.bordered)

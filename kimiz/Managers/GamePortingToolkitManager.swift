@@ -6,6 +6,7 @@
 //
 
 import AppKit
+import Combine
 import Foundation
 import SwiftUI
 
@@ -156,8 +157,14 @@ class GamePortingToolkitManager: ObservableObject {
         // Get the game's install directory for the working directory
         let gameDirectory = (executablePath as NSString).deletingLastPathComponent
 
-        // Expanded list of possible Wine locations on macOS
+        // Expanded list of possible Game Porting Toolkit and Wine locations on macOS
         let possibleWinePaths = [
+            // Game Porting Toolkit paths (prioritized)
+            "/opt/homebrew/Cellar/game-porting-toolkit/1.1/bin/wine64",
+            "/usr/local/Cellar/game-porting-toolkit/1.1/bin/wine64",
+            // GPTK from Apple tap
+            "/opt/homebrew/bin/game-porting-toolkit",
+            "/usr/local/bin/game-porting-toolkit",
             // Homebrew (Apple Silicon)
             "/opt/homebrew/bin/wine",
             "/opt/homebrew/bin/wine64",
@@ -188,17 +195,17 @@ class GamePortingToolkitManager: ObservableObject {
         else {
             await MainActor.run {
                 let alert = NSAlert()
-                alert.messageText = "Wine Not Found"
+                alert.messageText = "Game Porting Toolkit Not Found"
                 alert.informativeText =
-                    "No Wine binary found in expected locations. Please install Wine using Homebrew, MacPorts, or CrossOver.\n\nExpected locations:\n"
+                    "No Game Porting Toolkit or Wine binary found in expected locations. Please install Game Porting Toolkit using Homebrew first.\n\nExpected locations:\n"
                     + possibleWinePaths.joined(separator: "\n")
                 alert.alertStyle = .critical
                 alert.runModal()
             }
-            print("No Wine binary found in expected locations.")
+            print("No Game Porting Toolkit or Wine binary found in expected locations.")
             throw GPTKError.notInstalled
         }
-        print("[kimiz] Using wine binary at: \(winePath)")
+        print("[kimiz] Using Game Porting Toolkit/Wine binary at: \(winePath)")
         print("[kimiz] Launching: \(executablePath)")
 
         let environment = getOptimizedEnvironment()
@@ -220,15 +227,28 @@ class GamePortingToolkitManager: ObservableObject {
         // Game Porting Toolkit specific optimizations
         environment["WINEPREFIX"] = defaultBottlePath
         environment["WINEDEBUG"] = "-all"
-        environment["MTL_HUD_ENABLED"] = "1"
+        environment["MTL_HUD_ENABLED"] = "0"  // Disable HUD for better performance
         environment["WINEESYNC"] = "1"
         environment["DXVK_ASYNC"] = "1"
         environment["WINE_LARGE_ADDRESS_AWARE"] = "1"
         environment["MTL_SHADER_VALIDATION"] = "0"
         environment["MTL_DEBUG_LAYER"] = "0"
 
+        // GPTK-specific optimizations
+        environment["GPTK_ENABLE"] = "1"
+        environment["GPTK_SHADER_CACHE"] = "1"
+        environment["GPTK_METAL_HUD"] = "0"  // Disable Metal HUD by default
+        environment["GPTK_DYLD_FALLBACK_LIBRARY_PATH"] = "/opt/homebrew/lib:/usr/local/lib"
+        environment["GPTK_METAL_VALIDATION"] = "0"  // Disable Metal validation for performance
+
+        // CPU usage optimization
+        environment["WINE_PTHREAD_MUTEX_DISABLE_CONSISTENCY_CHECK"] = "1"  // Reduce CPU overhead
+        environment["WINE_NO_CREATE_PROCESS_GROUP"] = "1"  // Reduce process overhead
+        environment["WINE_FOREGROUND_PRIORITY"] = "normal"  // Don't use high priority
+        environment["WINE_BACKGROUND_PRIORITY"] = "low"  // Use low priority for background tasks
+
         // Memory and performance optimizations
-        environment["WINE_CPU_TOPOLOGY"] = "4:2"
+        environment["WINE_CPU_TOPOLOGY"] = "2:2"  // Limit CPU cores for lower usage
         environment["STAGING_WRITECOPY"] = "1"
         environment["STAGING_SHARED_MEMORY"] = "1"
 
@@ -253,6 +273,14 @@ class GamePortingToolkitManager: ObservableObject {
         environment["WINE_LARGE_ADDRESS_AWARE"] = "1"
         environment["MTL_SHADER_VALIDATION"] = "0"
         environment["MTL_DEBUG_LAYER"] = "0"
+
+        // GPTK-specific optimizations
+        environment["GPTK_ENABLE"] = "1"
+        environment["GPTK_SHADER_CACHE"] = "1"
+        environment["GPTK_METAL_HUD"] = "0"  // Disable Metal HUD by default
+        environment["GPTK_DYLD_FALLBACK_LIBRARY_PATH"] = "/opt/homebrew/lib:/usr/local/lib"
+        environment["GPTK_METAL_VALIDATION"] = "0"  // Disable Metal validation for performance
+
         environment["WINE_CPU_TOPOLOGY"] = "4:2"
         environment["STAGING_WRITECOPY"] = "1"
         environment["STAGING_SHARED_MEMORY"] = "1"
@@ -457,6 +485,12 @@ class GamePortingToolkitManager: ObservableObject {
 
         guard
             let winePath = [
+                // GPTK paths first
+                "/opt/homebrew/Cellar/game-porting-toolkit/1.1/bin/wine64",
+                "/usr/local/Cellar/game-porting-toolkit/1.1/bin/wine64",
+                "/opt/homebrew/bin/game-porting-toolkit",
+                "/usr/local/bin/game-porting-toolkit",
+                // Fallback to Wine if GPTK is not available
                 "/opt/homebrew/bin/wine64",
                 "/usr/local/bin/wine64",
                 "/opt/homebrew/bin/wine",
@@ -925,63 +959,37 @@ class GamePortingToolkitManager: ObservableObject {
         return defaultBottlePath
     }
 
-    // Enhanced scanning specifically for Elden Ring
-    func scanForEldenRing() async -> [Game] {
-        var eldenRingGames: [Game] = []
+    // MARK: - Bottle Management
 
-        // Scan all CrossOver bottles for Elden Ring
-        let crossOverBottlesPath =
-            NSHomeDirectory() + "/Library/Application Support/CrossOver/Bottles"
-
-        do {
-            let bottleNames = try fileManager.contentsOfDirectory(atPath: crossOverBottlesPath)
-            for bottleName in bottleNames {
-                let steamAppsPath =
-                    "\(crossOverBottlesPath)/\(bottleName)/drive_c/Program Files (x86)/Steam/steamapps/common"
-
-                // Look for Elden Ring specifically
-                let eldenRingPath = "\(steamAppsPath)/ELDEN RING/Game/eldenring.exe"
-                if fileManager.fileExists(atPath: eldenRingPath) {
-                    let game = Game(
-                        name: "Elden Ring (CrossOver)",
-                        executablePath: eldenRingPath,
-                        installPath: "\(steamAppsPath)/ELDEN RING"
-                    )
-                    eldenRingGames.append(game)
-                    print("[kimiz] Found Elden Ring in CrossOver bottle: \(bottleName)")
-                }
-            }
-        } catch {
-            print("Error scanning for Elden Ring: \(error)")
-        }
-
-        return eldenRingGames
+    func getDefaultBottlePath() -> String {
+        return defaultBottlePath
     }
-}
 
-// MARK: - Error Types
+    // MARK: - Error Types
 
-enum GPTKError: LocalizedError {
-    case notInstalled
-    case gameNotFound(String)
-    case installationFailed(String)
-    case homebrewRequired
-    case rosettaRequired
+    enum GPTKError: LocalizedError {
+        case notInstalled
+        case gameNotFound(String)
+        case installationFailed(String)
+        case homebrewRequired
+        case rosettaRequired
 
-    var errorDescription: String? {
-        switch self {
-        case .notInstalled:
-            return "Game Porting Toolkit is not installed"
-        case .gameNotFound(let path):
-            return "Game executable not found: \(path)"
-        case .installationFailed(let message):
-            return "Installation failed: \(message)"
-        case .homebrewRequired:
-            return
-                "Homebrew is required to install Game Porting Toolkit. Please install Homebrew first."
-        case .rosettaRequired:
-            return
-                "Rosetta 2 is required on Apple Silicon Macs. Please install it by running: softwareupdate --install-rosetta"
+        var errorDescription: String? {
+            switch self {
+            case .notInstalled:
+                return
+                    "Game Porting Toolkit is not installed. Please install GPTK using Homebrew: brew install apple/apple/game-porting-toolkit"
+            case .gameNotFound(let path):
+                return "Game executable not found: \(path)"
+            case .installationFailed(let message):
+                return "Installation failed: \(message)"
+            case .homebrewRequired:
+                return
+                    "Homebrew is required to install Game Porting Toolkit. Please install Homebrew first."
+            case .rosettaRequired:
+                return
+                    "Rosetta 2 is required on Apple Silicon Macs. Please install it by running: softwareupdate --install-rosetta"
+            }
         }
     }
 }

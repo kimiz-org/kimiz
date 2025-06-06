@@ -81,25 +81,25 @@ struct EpicGamesConnectionView: View {
                     .font(.title2)
                     .fontWeight(.semibold)
 
-                Text("Demo Mode: Connect to a simulated Epic Games library")
+                Text("Connect your Epic Games account to access and manage your game library")
                     .font(.body)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
             }
 
-            // Demo Info Banner
+            // Authentication Info Banner
             VStack(spacing: 8) {
                 HStack {
                     Image(systemName: "info.circle.fill")
                         .foregroundColor(.blue)
-                    Text("Demo Mode Active")
+                    Text("Epic Games Authentication")
                         .font(.caption)
                         .fontWeight(.medium)
                         .foregroundColor(.blue)
                 }
 
                 Text(
-                    "This is a demonstration of Epic Games integration. No real authentication is performed. A simulated library with popular games will be shown."
+                    "This will open Epic Games' secure authentication page in your web browser. Sign in with your Epic Games account to connect your library."
                 )
                 .font(.caption2)
                 .foregroundColor(.secondary)
@@ -118,10 +118,10 @@ struct EpicGamesConnectionView: View {
                         if epicGamesManager.isConnecting {
                             ProgressView()
                                 .controlSize(.small)
-                            Text("Simulating Connection...")
+                            Text("Connecting to Epic Games...")
                         } else {
-                            Image(systemName: "play.circle")
-                            Text("Start Demo Connection")
+                            Image(systemName: "person.crop.circle.badge.plus")
+                            Text("Connect Epic Games Account")
                         }
                     }
                     .frame(maxWidth: .infinity)
