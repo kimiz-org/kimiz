@@ -423,27 +423,103 @@ actor WineManager {
     private func monitorAndOptimizeProcesses() async {
         // Get all Wine-related processes
         let wineProcesses = await getWineProcesses()
+        var totalCPU = 0.0
+        for proc in wineProcesses {
+            totalCPU += await getProcessCPUUsage(pid: proc.pid)
+        }
+
+        // If total CPU is extremely high, enforce global round-robin throttling
+        if totalCPU > 80.0 && wineProcesses.count > 1 {
+            logger.warning(
+                "[Global Throttle] Enforcing round-robin suspension for all Wine/GPTK processes (total CPU: \(totalCPU)%)"
+            )
+            await globalRoundRobinThrottle(processes: wineProcesses)
+            return
+        }
 
         for process in wineProcesses {
             let cpuUsage = await getProcessCPUUsage(pid: process.pid)
 
-            // Kill processes consuming excessive CPU
+            // Terminate processes consuming excessive CPU
             if cpuUsage > 95.0 {
                 logger.warning(
-                    "Terminating runaway Wine process PID \(process.pid) with \(cpuUsage)% CPU usage"
+                    "Terminating runaway Wine/GPTK process PID \(process.pid) with \(cpuUsage)% CPU usage"
                 )
                 await terminateProcess(pid: process.pid, processName: process.name)
             }
-            // Throttle processes with high but not excessive CPU usage
-            else if cpuUsage > 70.0 {
+            // Aggressively throttle processes with high CPU usage (now > 40%)
+            else if cpuUsage > 40.0 {
                 logger.info(
-                    "Throttling Wine process PID \(process.pid) with \(cpuUsage)% CPU usage")
+                    "Aggressively throttling Wine/GPTK process PID \(process.pid) with \(cpuUsage)% CPU usage"
+                )
+                await limitProcessCPU(pid: process.pid, maxCPU: 30.0)
+                await applyCPULimitIfAvailable(pid: process.pid, maxCPU: 30)
                 await throttleProcess(pid: process.pid)
             }
         }
 
         // Steam-specific optimizations
         await optimizeSteamProcesses()
+    }
+
+    /// Globally throttle all Wine/GPTK processes in a round-robin fashion
+    private func globalRoundRobinThrottle(processes: [(pid: Int32, name: String)]) async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            processQueue.async {
+                // Suspend all processes first
+                for proc in processes {
+                    kill(proc.pid, SIGSTOP)
+                }
+                self.logger.info("[Global Throttle] Suspended all Wine/GPTK processes")
+                // Resume each process one at a time for a short period
+                func resumeNext(index: Int) {
+                    if index >= processes.count {
+                        // After one round, resume all and finish
+                        for proc in processes {
+                            kill(proc.pid, SIGCONT)
+                        }
+                        self.logger.info(
+                            "[Global Throttle] Completed round-robin, resumed all processes")
+                        continuation.resume()
+                        return
+                    }
+                    let proc = processes[index]
+                    kill(proc.pid, SIGCONT)
+                    self.logger.info("[Global Throttle] Resumed PID \(proc.pid) for 0.05s")
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) {
+                        kill(proc.pid, SIGSTOP)
+                        self.logger.info("[Global Throttle] Re-suspended PID \(proc.pid)")
+                        resumeNext(index: index + 1)
+                    }
+                }
+                // Start round-robin
+                DispatchQueue.global().asyncAfter(deadline: .now() + 0.8) {
+                    resumeNext(index: 0)
+                }
+            }
+        }
+    }
+
+    /// Try to apply cpulimit if available
+    private func applyCPULimitIfAvailable(pid: Int32, maxCPU: Int) async {
+        await withCheckedContinuation { continuation in
+            processQueue.async {
+                let fileManager = FileManager.default
+                if fileManager.isExecutableFile(atPath: "/usr/local/bin/cpulimit") {
+                    let task = Process()
+                    task.launchPath = "/usr/local/bin/cpulimit"
+                    task.arguments = ["-p", "\(pid)", "-l", "\(maxCPU)", "-b"]
+                    do {
+                        try task.run()
+                        self.logger.info("Applied cpulimit to process PID \(pid)")
+                    } catch {
+                        self.logger.error(
+                            "Failed to apply cpulimit to process PID \(pid): \(error)")
+                    }
+                }
+                continuation.resume()
+            }
+        }
     }
 
     /// Apply Steam-specific performance optimizations
@@ -512,23 +588,23 @@ actor WineManager {
         }
     }
 
-    /// Throttle a process by briefly suspending and resuming it
+    /// Throttle a process by suspending for longer and resuming briefly
     private func throttleProcess(pid: Int32) async {
         await withCheckedContinuation { continuation in
             processQueue.async {
-                // Use standard throttling approach for all processes
-
-                // Use standard throttling approach for all processes
-                // Suspend process briefly to reduce CPU usage
+                // Suspend process for 0.5s to reduce CPU usage
                 kill(pid, SIGSTOP)
-
-                // Resume after a short delay
-                DispatchQueue.global().asyncAfter(deadline: .now() + 0.1) {
+                self.logger.info("[Throttle] Suspended process PID \(pid) for 0.5s")
+                DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
                     kill(pid, SIGCONT)
-                    self.logger.info("Throttled process PID \(pid)")
+                    self.logger.info("[Throttle] Resumed process PID \(pid) for 0.05s")
+                    // Briefly allow process to run, then suspend again
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) {
+                        kill(pid, SIGSTOP)
+                        self.logger.info("[Throttle] Re-suspended process PID \(pid)")
+                        continuation.resume()
+                    }
                 }
-
-                continuation.resume()
             }
         }
     }
