@@ -229,60 +229,48 @@ internal class GamePortingToolkitManager: ObservableObject {
         let gameDirectory = (executablePath as NSString).deletingLastPathComponent
 
         // Expanded list of possible Game Porting Toolkit and Wine locations on macOS
-        let possibleWinePaths = [
-            // Game Porting Toolkit paths (prioritized)
-            "/opt/homebrew/Cellar/game-porting-toolkit/1.1/bin/wine64",
-            "/usr/local/Cellar/game-porting-toolkit/1.1/bin/wine64",
-            // GPTK from Apple tap
+        let possibleGPTKPaths = [
+            // Prefer Game Porting Toolkit binaries
             "/opt/homebrew/bin/game-porting-toolkit",
             "/usr/local/bin/game-porting-toolkit",
-            // Homebrew (Apple Silicon)
-            "/opt/homebrew/bin/wine",
-            "/opt/homebrew/bin/wine64",
-            // Homebrew (Intel)
-            "/usr/local/bin/wine",
-            "/usr/local/bin/wine64",
-            // MacPorts
-            "/opt/local/bin/wine",
-            "/opt/local/bin/wine64",
-            // CrossOver
-            NSHomeDirectory() + "/Applications/CrossOver.app/Contents/Resources/wine/bin/wine",
-            NSHomeDirectory() + "/Applications/CrossOver.app/Contents/Resources/wine/bin/wine64",
-            "/Applications/CrossOver.app/Contents/Resources/wine/bin/wine",
-            "/Applications/CrossOver.app/Contents/Resources/wine/bin/wine64",
-            // Cellar (Homebrew internal)
-            "/usr/local/Cellar/wine/bin/wine",
-            "/usr/local/Cellar/wine/bin/wine64",
-            "/opt/homebrew/Cellar/wine/bin/wine",
-            "/opt/homebrew/Cellar/wine/bin/wine64",
-            // Fallback: user bin
-            NSHomeDirectory() + "/bin/wine",
-            NSHomeDirectory() + "/bin/wine64",
-            // Fallback: /usr/bin
-            "/usr/bin/wine",
-            "/usr/bin/wine64",
+            "/opt/homebrew/Cellar/game-porting-toolkit/1.1/bin/game-porting-toolkit",
+            "/usr/local/Cellar/game-porting-toolkit/1.1/bin/game-porting-toolkit",
         ]
-        guard let winePath = possibleWinePaths.first(where: { fileManager.fileExists(atPath: $0) })
-        else {
+        let possibleWinePaths = [
+            // Fallback to Wine only if GPTK is not found
+            "/opt/homebrew/bin/wine64",
+            "/usr/local/bin/wine64",
+            "/opt/homebrew/bin/wine",
+            "/usr/local/bin/wine",
+            "/opt/local/bin/wine64",
+            "/opt/local/bin/wine",
+            NSHomeDirectory() + "/bin/wine64",
+            NSHomeDirectory() + "/bin/wine",
+            "/usr/bin/wine64",
+            "/usr/bin/wine",
+        ]
+        let gptkPath = possibleGPTKPaths.first(where: { fileManager.fileExists(atPath: $0) })
+        let winePath = possibleWinePaths.first(where: { fileManager.fileExists(atPath: $0) })
+        guard let selectedPath = gptkPath else {
             await MainActor.run {
                 let alert = NSAlert()
                 alert.messageText = "Game Porting Toolkit Not Found"
                 alert.informativeText =
-                    "No Game Porting Toolkit or Wine binary found in expected locations. Please install Game Porting Toolkit using Homebrew first.\n\nExpected locations:\n"
-                    + possibleWinePaths.joined(separator: "\n")
+                    "No Game Porting Toolkit binary found in expected locations. Please install Game Porting Toolkit using Homebrew first.\n\nExpected locations:\n"
+                    + possibleGPTKPaths.joined(separator: "\n")
                 alert.alertStyle = .critical
                 alert.runModal()
             }
-            print("No Game Porting Toolkit or Wine binary found in expected locations.")
+            print("No Game Porting Toolkit binary found in expected locations.")
             throw GPTKError.notInstalled
         }
-        print("[kimiz] Using Game Porting Toolkit/Wine binary at: \(winePath)")
+        print("[kimiz] Using Game Porting Toolkit binary at: \(selectedPath)")
         print("[kimiz] Launching: \(executablePath)")
 
         let environment = getOptimizedEnvironment()
         // Use the new async/await WineManager logic with working directory support
         try await WineManager.shared.runWineProcess(
-            winePath: winePath,
+            winePath: selectedPath,
             executablePath: executablePath,
             environment: environment,
             workingDirectory: gameDirectory,
@@ -491,28 +479,21 @@ internal class GamePortingToolkitManager: ObservableObject {
         // Run Steam installer using WineManager
         let environment = getOptimizedEnvironment()
 
-        guard
-            let winePath = [
-                // GPTK paths first
-                "/opt/homebrew/Cellar/game-porting-toolkit/1.1/bin/wine64",
-                "/usr/local/Cellar/game-porting-toolkit/1.1/bin/wine64",
-                "/opt/homebrew/bin/game-porting-toolkit",
-                "/usr/local/bin/game-porting-toolkit",
-                // Fallback to Wine if GPTK is not available
-                "/opt/homebrew/bin/wine64",
-                "/usr/local/bin/wine64",
-                "/opt/homebrew/bin/wine",
-                "/usr/local/bin/wine",
-            ].first(where: {
-                FileManager.default.fileExists(atPath: $0)
-            })
-        else {
+        let possibleGPTKPaths = [
+            "/opt/homebrew/bin/game-porting-toolkit",
+            "/usr/local/bin/game-porting-toolkit",
+            "/opt/homebrew/Cellar/game-porting-toolkit/1.1/bin/game-porting-toolkit",
+            "/usr/local/Cellar/game-porting-toolkit/1.1/bin/game-porting-toolkit",
+        ]
+        let gptkPath = possibleGPTKPaths.first(where: { FileManager.default.fileExists(atPath: $0) }
+        )
+        guard let selectedPath = gptkPath else {
             throw GPTKError.notInstalled
         }
 
         // Use WineManager to run the Steam installer
         try await WineManager.shared.runWineProcess(
-            winePath: winePath,
+            winePath: selectedPath,
             executablePath: installerPath.path,
             arguments: ["/S"],  // Silent install
             environment: environment,

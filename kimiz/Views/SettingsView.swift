@@ -184,6 +184,28 @@ struct SettingsView: View {
                     icon: "cpu",
                     isOn: $useDXVKAsync
                 )
+
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "lightbulb.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(.orange)
+                        Text("Performance Tips")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.8))
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("• Enable Esync for better CPU utilization")
+                            .font(.system(size: 11))
+                            .foregroundColor(.white.opacity(0.7))
+                        Text("• DXVK Async can reduce stuttering but may cause graphical issues")
+                            .font(.system(size: 11))
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                }
+                .padding(12)
+                .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
             }
         }
     }

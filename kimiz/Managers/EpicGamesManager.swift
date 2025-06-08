@@ -417,46 +417,29 @@ internal class EpicGamesManager: NSObject, ObservableObject {
     /// Launch game using Wine with optimized environment
     private func launchGameWithWine(executablePath: String, gameName: String) async throws {
         // Find Wine/GPTK executable - just verify it exists
-        let possibleWinePaths = [
-            "/opt/homebrew/bin/wine64",
-            "/usr/local/bin/wine64",
-            "/opt/homebrew/bin/wine",
-            "/usr/local/bin/wine",
+        let possibleGPTKPaths = [
+            "/opt/homebrew/bin/game-porting-toolkit",
+            "/usr/local/bin/game-porting-toolkit",
+            "/opt/homebrew/Cellar/game-porting-toolkit/1.1/bin/game-porting-toolkit",
+            "/usr/local/Cellar/game-porting-toolkit/1.1/bin/game-porting-toolkit",
         ]
-
-        guard
-            possibleWinePaths.contains(where: {
-                FileManager.default.fileExists(atPath: $0)
-            })
-        else {
+        let gptkPath = possibleGPTKPaths.first(where: { FileManager.default.fileExists(atPath: $0) }
+        )
+        guard let selectedPath = gptkPath else {
             throw EpicGamesError.wineNotFound
         }
-
-        print("[EpicGamesManager] Launching \(gameName) with Wine")
+        print("[EpicGamesManager] Launching \(gameName) with GPTK")
         print("[EpicGamesManager] Executable: \(executablePath)")
-
         // Use WineManager to launch the game
-        // TODO: Fix WineManager scope issue
-        /*
         let gameDirectory = (executablePath as NSString).deletingLastPathComponent
-        guard let winePath = possibleWinePaths.first(where: {
-            FileManager.default.fileExists(atPath: $0)
-        }) else {
-            throw EpicGamesError.wineNotFound
-        }
         let environment = getOptimizedEnvironment()
-        
         try await WineManager.shared.runWineProcess(
-            winePath: winePath,
+            winePath: selectedPath,
             executablePath: executablePath,
             environment: environment,
             workingDirectory: gameDirectory,
             defaultBottlePath: selectedBottlePath ?? ""
         )
-        */
-
-        // Temporary implementation - throw error until WineManager issue is resolved
-        throw EpicGamesError.installationFailed("WineManager integration temporarily disabled")
     }
 
     // MARK: - Utility Methods
