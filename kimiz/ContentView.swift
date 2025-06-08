@@ -359,18 +359,6 @@ struct ContentView: View {
                 }
                 .tag(2)
 
-            PerformanceView()
-                .environmentObject(gamePortingToolkitManager)
-                .tabItem {
-                    VStack(spacing: 4) {
-                        Image(systemName: selectedTab == 3 ? "speedometer.fill" : "speedometer")
-                            .font(.system(size: 16, weight: .medium))
-                        Text("Performance")
-                            .font(.system(size: 11, weight: .medium))
-                    }
-                }
-                .tag(3)
-
             SettingsView()
                 .environmentObject(gamePortingToolkitManager)
                 .tabItem {
@@ -381,7 +369,7 @@ struct ContentView: View {
                             .font(.system(size: 11, weight: .medium))
                     }
                 }
-                .tag(4)
+                .tag(3)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.clear)

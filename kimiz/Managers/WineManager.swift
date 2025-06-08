@@ -465,6 +465,9 @@ actor WineManager {
             }
         }
 
+        // --- PERFORMANCE: Aggressive Steam/Service Throttling ---
+        await aggressivelyThrottleBackgroundProcesses()
+
         // Steam-specific optimizations
         await optimizeSteamProcesses()
     }
@@ -788,5 +791,125 @@ actor WineManager {
             wineProcessCount: wineProcesses.count,
             activeProcessCount: activeProcesses.count
         )
+    }
+
+    // MARK: - Deep Performance Optimizations
+
+    /// Mount a RAM disk and use it for Wine's TMPDIR and cache for high I/O games
+    func setupRAMDisk(sizeMB: Int = 512) -> String? {
+        let ramDiskName = "kimiz_ramdisk"
+        let ramDiskPath = "/Volumes/\(ramDiskName)"
+        let sizeSectors = sizeMB * 2048  // 512 bytes per sector
+        let fm = FileManager.default
+        if !fm.fileExists(atPath: ramDiskPath) {
+            let attachCmd =
+                "diskutil erasevolume HFS+ \(ramDiskName) $(hdiutil attach -nomount ram://\(sizeSectors))"
+            let task = Process()
+            task.launchPath = "/bin/zsh"
+            task.arguments = ["-c", attachCmd]
+            do {
+                try task.run()
+                task.waitUntilExit()
+            } catch {
+                print("[WineManager] Failed to create RAM disk: \(error)")
+                return nil
+            }
+        }
+        return ramDiskPath
+    }
+
+    /// Set up optimized environment variables for Wine
+    func optimizedWineEnvironment(base: [String: String], useRAMDisk: Bool = false) -> [String:
+        String]
+    {
+        var env = base
+        env["WINEDEBUG"] = "-all"
+        env["DXVK_HUD"] = "0"
+        env["DXVK_LOG_LEVEL"] = "none"
+        env["VKD3D_DEBUG"] = "none"
+        env["MESA_NO_ERROR"] = "1"
+        // Prefer RAM disk for TMPDIR if requested
+        if useRAMDisk, let ramDisk = setupRAMDisk() {
+            env["TMPDIR"] = ramDisk
+        }
+        // Prefer Metal via MoltenVK if available
+        env["VK_ICD_FILENAMES"] =
+            "/Library/Frameworks/VMwareVM.framework/Resources/vulkan/icd.d/MoltenVK_icd.json"
+        return env
+    }
+
+    // Helper: Static version for use outside actor context
+    static func staticOptimizedWineEnvironment(base: [String: String], useRAMDisk: Bool = false)
+        -> [String: String]
+    {
+        var env = base
+        env["WINEDEBUG"] = "-all"
+        env["DXVK_HUD"] = "0"
+        env["DXVK_LOG_LEVEL"] = "none"
+        env["VKD3D_DEBUG"] = "none"
+        env["MESA_NO_ERROR"] = "1"
+        if useRAMDisk {
+            // RAM disk setup is not actor-isolated, but this is a best-effort static path
+            let ramDiskPath = "/Volumes/kimiz_ramdisk"
+            env["TMPDIR"] = ramDiskPath
+        }
+        env["VK_ICD_FILENAMES"] =
+            "/Library/Frameworks/VMwareVM.framework/Resources/vulkan/icd.d/MoltenVK_icd.json"
+        return env
+    }
+
+    /// Monitor memory usage and kill Wine process if it exceeds threshold (MB)
+    private func monitorMemoryAndKill(pid: Int32, maxMB: Int = 4096) async {
+        await withCheckedContinuation { continuation in
+            let task = Process()
+            task.launchPath = "/bin/ps"
+            task.arguments = ["-p", "\(pid)", "-o", "rss="]
+            let pipe = Pipe()
+            task.standardOutput = pipe
+            do {
+                try task.run()
+                task.waitUntilExit()
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                if let output = String(data: data, encoding: .utf8),
+                    let rssKB = Int(output.trimmingCharacters(in: .whitespacesAndNewlines))
+                {
+                    let rssMB = rssKB / 1024
+                    if rssMB > maxMB {
+                        self.logger.warning(
+                            "Killing Wine process PID \(pid) for excessive memory usage: \(rssMB) MB"
+                        )
+                        kill(pid, SIGTERM)
+                    }
+                }
+            } catch {}
+            continuation.resume()
+        }
+    }
+
+    /// Insert os_signpost for fine-grained tracing (requires import os.signpost)
+    private func tracePerformance(_ name: StaticString, block: () -> Void) {
+        if #available(macOS 10.14, *) {
+            let log = OSLog(subsystem: "dev.kimiz.gptkmanager", category: "signpost")
+            let signpostID = OSSignpostID(log: log)
+            os_signpost(.begin, log: log, name: name, signpostID: signpostID)
+            block()
+            os_signpost(.end, log: log, name: name, signpostID: signpostID)
+        } else {
+            block()
+        }
+    }
+
+    // --- PERFORMANCE: Aggressive Steam/Service Throttling ---
+    private func aggressivelyThrottleBackgroundProcesses() async {
+        // Throttle SteamWebHelper, winedevice, plugplay, and other known CPU hogs
+        let throttleTargets = ["steamwebhelper", "winedevice", "plugplay", "services", "rpcss"]
+        let wineProcesses = await getWineProcesses()
+        for proc in wineProcesses {
+            let name = proc.name.lowercased()
+            if throttleTargets.contains(where: { name.contains($0) }) {
+                await limitProcessCPU(pid: proc.pid, maxCPU: 20.0)
+                await throttleProcess(pid: proc.pid)
+            }
+        }
     }
 }

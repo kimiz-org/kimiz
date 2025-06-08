@@ -406,12 +406,21 @@ struct ModernInfoPanel: View {
                         .fill(accentColor.opacity(0.2))
                         .frame(width: 48, height: 48)
 
-                    Image(systemName: icon)
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundColor(accentColor)
+                    // Try SF Symbol first, fallback to asset if not available
+                    if NSImage(systemSymbolName: icon, accessibilityDescription: nil) != nil {
+                        Image(systemName: icon)
+                            .font(.system(size: 24, weight: .medium))
+                            .foregroundColor(accentColor)
+                    } else {
+                        Image(icon)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 24, height: 24)
+                            .foregroundColor(accentColor)
+                    }
                 }
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text(title)
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.white)

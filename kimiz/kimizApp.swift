@@ -11,12 +11,14 @@ import SwiftUI
 struct kimizApp: App {
     @StateObject private var gamePortingToolkitManager = GamePortingToolkitManager.shared
     @StateObject private var epicGamesManager = EpicGamesManager.shared
+    @StateObject private var bottleManager = BottleManager.shared
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(gamePortingToolkitManager)
                 .environmentObject(epicGamesManager)
+                .environmentObject(bottleManager)
                 .onOpenURL { url in
                     handleURLScheme(url)
                 }

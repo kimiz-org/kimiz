@@ -10,6 +10,7 @@ import SwiftUI
 
 struct CompatibilityToolsView: View {
     @EnvironmentObject var gamePortingToolkitManager: GamePortingToolkitManager
+    @EnvironmentObject var bottleManager: BottleManager
     @Binding var isPresented: Bool
 
     @State private var installedTools: [CompatibilityTool] = []
@@ -385,8 +386,8 @@ struct CompatibilityToolsView: View {
                 }
 
                 // Actually install the component
-                if let bottle = gamePortingToolkitManager.selectedBottle {
-                    try await gamePortingToolkitManager.installDependency(
+                if let bottle = bottleManager.selectedBottle {
+                    try await bottleManager.installDependency(
                         tool.name.lowercased().replacingOccurrences(of: " ", with: ""),
                         for: bottle
                     )
@@ -426,8 +427,8 @@ struct CompatibilityToolsView: View {
                 }
 
                 do {
-                    if let bottle = gamePortingToolkitManager.selectedBottle {
-                        try await gamePortingToolkitManager.installDependency(
+                    if let bottle = bottleManager.selectedBottle {
+                        try await bottleManager.installDependency(
                             tool,
                             for: bottle
                         )
@@ -568,4 +569,5 @@ struct ModernCompatibilityToolCard: View {
 #Preview {
     CompatibilityToolsView(isPresented: Binding.constant(true))
         .environmentObject(GamePortingToolkitManager.shared)
+        .environmentObject(BottleManager.shared)
 }

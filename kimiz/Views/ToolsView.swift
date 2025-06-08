@@ -9,6 +9,7 @@ import SwiftUI
 
 struct ToolsView: View {
     @EnvironmentObject var gamePortingToolkitManager: GamePortingToolkitManager
+    @EnvironmentObject var bottleManager: BottleManager
     @EnvironmentObject var epicGamesManager: EpicGamesManager
     @State private var showingBottleManager = false
     @State private var showingCompatibilityTools = false
@@ -47,11 +48,12 @@ struct ToolsView: View {
             BottleManagerView(
                 isPresented: $showingBottleManager, availableBottles: $availableBottles
             )
-            .environmentObject(gamePortingToolkitManager)
+            .environmentObject(bottleManager)
         }
         .sheet(isPresented: $showingCompatibilityTools) {
             CompatibilityToolsView(isPresented: $showingCompatibilityTools)
                 .environmentObject(gamePortingToolkitManager)
+                .environmentObject(bottleManager)
         }
         .sheet(isPresented: $showingEpicConnection) {
             EpicGamesConnectionView(isPresented: $showingEpicConnection)
@@ -283,7 +285,7 @@ struct ToolsView: View {
     // MARK: - Helper Functions
 
     private func loadAvailableBottles() {
-        availableBottles = gamePortingToolkitManager.bottles.map { $0.name }
+        availableBottles = bottleManager.bottles.map { $0.name }
     }
 
     private func handleFileSelection(_ result: Result<[URL], Error>) {
@@ -316,18 +318,18 @@ struct ToolsView: View {
         guard gamePortingToolkitManager.isGPTKInstalled else { return }
         Task {
             do {
-                if let bottle = gamePortingToolkitManager.selectedBottle {
+                if let bottle = bottleManager.selectedBottle {
                     let winePath = [
                         "/opt/homebrew/bin/wine",
                         "/usr/local/bin/wine",
                         "/opt/homebrew/bin/wine64",
                         "/usr/local/bin/wine64",
                     ].first(where: { FileManager.default.fileExists(atPath: $0) })
-                    
+
                     guard let winePath = winePath else { return }
-                    
-                    let environment = gamePortingToolkitManager.getOptimizedEnvironment(for: bottle)
-                    
+
+                    let environment = bottleManager.getOptimizedEnvironment(for: bottle)
+
                     try await WineManager.shared.runWineProcess(
                         winePath: winePath,
                         executablePath: "regedit",
@@ -355,18 +357,18 @@ struct ToolsView: View {
         guard gamePortingToolkitManager.isGPTKInstalled else { return }
         Task {
             do {
-                if let bottle = gamePortingToolkitManager.selectedBottle {
+                if let bottle = bottleManager.selectedBottle {
                     let winePath = [
                         "/opt/homebrew/bin/wine",
                         "/usr/local/bin/wine",
                         "/opt/homebrew/bin/wine64",
                         "/usr/local/bin/wine64",
                     ].first(where: { FileManager.default.fileExists(atPath: $0) })
-                    
+
                     guard let winePath = winePath else { return }
-                    
-                    let environment = gamePortingToolkitManager.getOptimizedEnvironment(for: bottle)
-                    
+
+                    let environment = bottleManager.getOptimizedEnvironment(for: bottle)
+
                     try await WineManager.shared.runWineProcess(
                         winePath: winePath,
                         executablePath: "taskmgr",
@@ -385,18 +387,18 @@ struct ToolsView: View {
         guard gamePortingToolkitManager.isGPTKInstalled else { return }
         Task {
             do {
-                if let bottle = gamePortingToolkitManager.selectedBottle {
+                if let bottle = bottleManager.selectedBottle {
                     let winePath = [
                         "/opt/homebrew/bin/wine",
                         "/usr/local/bin/wine",
                         "/opt/homebrew/bin/wine64",
                         "/usr/local/bin/wine64",
                     ].first(where: { FileManager.default.fileExists(atPath: $0) })
-                    
+
                     guard let winePath = winePath else { return }
-                    
-                    let environment = gamePortingToolkitManager.getOptimizedEnvironment(for: bottle)
-                    
+
+                    let environment = bottleManager.getOptimizedEnvironment(for: bottle)
+
                     try await WineManager.shared.runWineProcess(
                         winePath: winePath,
                         executablePath: "winecfg",

@@ -9,11 +9,9 @@ import AppKit
 import Foundation
 import SwiftUI
 
-// Import modern components
-// Note: ModernTheme, ModernComponents, and ModernButtonStyle are defined in the Views/Components directory
-
 struct OnboardingView: View {
     @EnvironmentObject var gamePortingToolkitManager: GamePortingToolkitManager
+    @EnvironmentObject var bottleManager: BottleManager
     @State private var isInstalling = false
     @State private var installationError: String?
     @State private var hasCheckedInitialState = false
@@ -65,9 +63,9 @@ struct OnboardingView: View {
                 hasCheckedInitialState = true
             }
             // Automatically create a default bottle if none exists
-            if gamePortingToolkitManager.bottles.isEmpty {
+            if bottleManager.bottles.isEmpty {
                 Task {
-                    await gamePortingToolkitManager.createBottle(name: "MyBottle")
+                    await bottleManager.createBottle(name: "MyBottle")
                 }
             }
         }
@@ -222,7 +220,7 @@ struct OnboardingView: View {
             VStack(spacing: ModernTheme.Spacing.md) {
                 Button("Create New Bottle") {
                     Task {
-                        await gamePortingToolkitManager.createBottle(name: "MyBottle")
+                        await bottleManager.createBottle(name: "MyBottle")
                     }
                 }
                 .buttonStyle(ModernPrimaryButtonStyle())
@@ -246,25 +244,19 @@ struct OnboardingView: View {
                 }
                 .buttonStyle(ModernSecondaryButtonStyle())
             }
-            if !gamePortingToolkitManager.bottles.isEmpty {
-                ModernInfoPanel(
-                    title: "Your Bottles",
-                    icon: "cylinder",
-                    iconColor: .blue
-                ) {
-                    VStack(spacing: ModernTheme.Spacing.small) {
-                        ForEach(gamePortingToolkitManager.bottles) { bottle in
-                            HStack {
-                                Text(bottle.name)
-                                    .foregroundColor(ModernTheme.Colors.textPrimary)
-                                Spacer()
-                                Text(bottle.path)
-                                    .font(ModernTheme.Typography.caption)
-                                    .foregroundColor(ModernTheme.Colors.textSecondary)
-                            }
-                            .padding(ModernTheme.Spacing.small)
-                            .background(Color.white.opacity(0.05))
-                            .cornerRadius(ModernTheme.CornerRadius.medium)
+            if !bottleManager.bottles.isEmpty {
+                VStack(spacing: 16) {
+                    ModernInfoPanel(
+                        title: "Your Bottles",
+                        icon: "cylinder",
+                        accentColor: .blue
+                    )
+
+                    VStack(spacing: 8) {
+                        ForEach(
+                            Array(bottleManager.bottles.enumerated()), id: \.element.id
+                        ) { index, bottle in
+                            bottleRowView(bottle: bottle)
                         }
                     }
                 }
@@ -276,10 +268,24 @@ struct OnboardingView: View {
         .padding(.horizontal, ModernTheme.Spacing.xl)
     }
 
+    private func bottleRowView(bottle: BottleManager.Bottle) -> some View {
+        HStack {
+            Text(bottle.name)
+                .foregroundColor(ModernTheme.Colors.textPrimary)
+            Spacer()
+            Text(bottle.path)
+                .font(ModernTheme.Typography.caption1)
+                .foregroundColor(ModernTheme.Colors.textSecondary)
+        }
+        .padding(ModernTheme.Spacing.small)
+        .background(Color.white.opacity(0.05))
+        .cornerRadius(ModernTheme.CornerRadius.md)
+    }
+
     // MARK: - Actions
     private func checkInitialStateAndSetup() {
         // Only pass onboarding if at least one bottle exists AND Wine/GPTK is available
-        if !gamePortingToolkitManager.bottles.isEmpty
+        if !bottleManager.bottles.isEmpty
             && gamePortingToolkitManager.isGPTKInstalled
         {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
@@ -386,4 +392,5 @@ struct OnboardingView: View {
 #Preview {
     OnboardingView(showOnboarding: Binding.constant(true))
         .environmentObject(GamePortingToolkitManager.shared)
+        .environmentObject(BottleManager.shared)
 }

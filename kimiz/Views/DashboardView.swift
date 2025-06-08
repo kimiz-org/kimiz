@@ -5,8 +5,8 @@
 //  Created by temidaradev on 7.06.2025.
 //
 
-import SwiftUI
 import Foundation
+import SwiftUI
 
 struct DashboardView: View {
     @EnvironmentObject var gamePortingToolkitManager: GamePortingToolkitManager
@@ -14,15 +14,7 @@ struct DashboardView: View {
     @StateObject private var libraryManager = LibraryManager.shared
 
     @State private var recentGames: [Game] = []
-    @State private var systemStats = SystemStats()
     @State private var showingAllGames = false
-
-    struct SystemStats {
-        var cpuUsage: Double = 0.0
-        var memoryUsage: Double = 0.0
-        var activeProcesses: Int = 0
-        var wineBottles: Int = 0
-    }
 
     var body: some View {
         ZStack {
@@ -126,31 +118,6 @@ struct DashboardView: View {
                     icon: "gamecontroller.fill",
                     accentColor: .blue
                 )
-
-                ModernStatisticsCard(
-                    title: "CPU Usage",
-                    value: "\(Int(systemStats.cpuUsage))%",
-                    icon: "cpu",
-                    trend: systemStats.cpuUsage > 80
-                        ? .up : systemStats.cpuUsage < 30 ? .down : .neutral,
-                    accentColor: .green
-                )
-
-                ModernStatisticsCard(
-                    title: "Memory",
-                    value: "\(Int(systemStats.memoryUsage))%",
-                    icon: "memorychip",
-                    trend: systemStats.memoryUsage > 80
-                        ? .up : systemStats.memoryUsage < 50 ? .down : .neutral,
-                    accentColor: .orange
-                )
-
-                ModernStatisticsCard(
-                    title: "Wine Processes",
-                    value: "\(systemStats.activeProcesses)",
-                    icon: "gearshape.2.fill",
-                    accentColor: .purple
-                )
             }
         }
     }
@@ -237,7 +204,7 @@ struct DashboardView: View {
                                 onLaunch: {
                                     // Launch game action
                                 },
-                                onDelete: { },
+                                onDelete: {},
                                 onHover: { _ in }
                             )
                         }
@@ -273,14 +240,6 @@ struct DashboardView: View {
                     accentColor: .blue
                 ) {
                     // Show install dialog
-                }
-
-                QuickActionCard(
-                    title: "Performance",
-                    icon: "speedometer",
-                    accentColor: .green
-                ) {
-                    // Show performance view
                 }
 
                 QuickActionCard(
@@ -321,14 +280,6 @@ struct DashboardView: View {
     private func loadDashboardData() {
         // Load recent games
         recentGames = Array(libraryManager.discoveredGames.prefix(6))
-
-        // Simulate system stats (in a real app, you'd get actual system info)
-        systemStats = SystemStats(
-            cpuUsage: Double.random(in: 15...45),
-            memoryUsage: Double.random(in: 40...70),
-            activeProcesses: Int.random(in: 0...3),
-            wineBottles: Int.random(in: 1...5)
-        )
     }
 }
 

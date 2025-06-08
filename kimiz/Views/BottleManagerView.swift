@@ -9,7 +9,7 @@ import Foundation
 import SwiftUI
 
 struct BottleManagerView: View {
-    @EnvironmentObject var gamePortingToolkitManager: GamePortingToolkitManager
+    @EnvironmentObject var bottleManager: BottleManager
     @Binding var isPresented: Bool
     @Binding var availableBottles: [String]
 
@@ -334,7 +334,7 @@ struct BottleManagerView: View {
         isCreatingBottle = true
 
         Task {
-            await gamePortingToolkitManager.createBottle(name: newBottleName)
+            await bottleManager.createBottle(name: newBottleName)
 
             await MainActor.run {
                 // Add to available bottles
@@ -609,5 +609,5 @@ private let relativeDateFormatter: RelativeDateTimeFormatter = {
         isPresented: Binding.constant(true),
         availableBottles: Binding.constant(["Default", "Gaming"])
     )
-    .environmentObject(GamePortingToolkitManager.shared)
+    .environmentObject(BottleManager.shared)
 }

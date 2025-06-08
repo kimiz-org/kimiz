@@ -11,6 +11,7 @@ import SwiftUI
 
 struct InstallationWizardView: View {
     @EnvironmentObject var gamePortingToolkitManager: GamePortingToolkitManager
+    @EnvironmentObject var bottleManager: BottleManager
     @Binding var isPresented: Bool
 
     @State private var currentStep = 0
@@ -718,16 +719,16 @@ struct InstallationWizardView: View {
                 // Install required components
                 if let template = selectedGameTemplate {
                     let bottle =
-                        gamePortingToolkitManager.bottles.first {
-                            $0.path == gamePortingToolkitManager.getDefaultBottlePath()
+                        bottleManager.bottles.first {
+                            $0.path == bottleManager.getDefaultBottlePath()
                         }
-                        ?? GamePortingToolkitManager.Bottle(
+                        ?? BottleManager.Bottle(
                             name: "Default",
-                            path: gamePortingToolkitManager.getDefaultBottlePath()
+                            path: bottleManager.getDefaultBottlePath()
                         )
 
                     for component in template.requiredComponents {
-                        try await gamePortingToolkitManager.installDependency(
+                        try await bottleManager.installDependency(
                             component, for: bottle)
                     }
                 }
@@ -749,4 +750,5 @@ struct InstallationWizardView: View {
 #Preview {
     InstallationWizardView(isPresented: Binding.constant(true))
         .environmentObject(GamePortingToolkitManager.shared)
+        .environmentObject(BottleManager.shared)
 }
