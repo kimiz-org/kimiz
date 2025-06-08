@@ -177,7 +177,7 @@ struct ContentView: View {
                 Menu {
                     Section("Quick Install") {
                         Button {
-                            selectedTab = 1  // Switch to Install tab
+                            selectedTab = 2  // Switch to Tools tab
                         } label: {
                             Label("Steam Client", systemImage: "cloud.fill")
                         }
@@ -198,7 +198,7 @@ struct ContentView: View {
                     Divider()
 
                     Button {
-                        selectedTab = 1  // Go to full install view
+                        selectedTab = 2  // Go to Tools view
                     } label: {
                         Label("View All Options", systemImage: "arrow.right.circle")
                     }
@@ -313,20 +313,35 @@ struct ContentView: View {
 
     private var modernTabView: some View {
         TabView(selection: $selectedTab) {
+            DashboardView()
+                .environmentObject(gamePortingToolkitManager)
+                .environmentObject(epicGamesManager)
+                .tabItem {
+                    VStack(spacing: 4) {
+                        Image(
+                            systemName: selectedTab == 0 ? "house.fill" : "house"
+                        )
+                        .font(.system(size: 16, weight: .medium))
+                        Text("Dashboard")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                }
+                .tag(0)
+
             LibraryView()
                 .environmentObject(gamePortingToolkitManager)
                 .environmentObject(epicGamesManager)
                 .tabItem {
                     VStack(spacing: 4) {
                         Image(
-                            systemName: selectedTab == 0 ? "books.vertical.fill" : "books.vertical"
+                            systemName: selectedTab == 1 ? "books.vertical.fill" : "books.vertical"
                         )
                         .font(.system(size: 16, weight: .medium))
                         Text("Library")
                             .font(.system(size: 11, weight: .medium))
                     }
                 }
-                .tag(0)
+                .tag(1)
 
             ToolsView()
                 .environmentObject(gamePortingToolkitManager)
@@ -334,7 +349,7 @@ struct ContentView: View {
                 .tabItem {
                     VStack(spacing: 4) {
                         Image(
-                            systemName: selectedTab == 1
+                            systemName: selectedTab == 2
                                 ? "wrench.and.screwdriver.fill" : "wrench.and.screwdriver"
                         )
                         .font(.system(size: 16, weight: .medium))
@@ -342,31 +357,31 @@ struct ContentView: View {
                             .font(.system(size: 11, weight: .medium))
                     }
                 }
-                .tag(1)
+                .tag(2)
 
             PerformanceView()
                 .environmentObject(gamePortingToolkitManager)
                 .tabItem {
                     VStack(spacing: 4) {
-                        Image(systemName: selectedTab == 2 ? "speedometer.fill" : "speedometer")
+                        Image(systemName: selectedTab == 3 ? "speedometer.fill" : "speedometer")
                             .font(.system(size: 16, weight: .medium))
                         Text("Performance")
                             .font(.system(size: 11, weight: .medium))
                     }
                 }
-                .tag(2)
+                .tag(3)
 
             SettingsView()
                 .environmentObject(gamePortingToolkitManager)
                 .tabItem {
                     VStack(spacing: 4) {
-                        Image(systemName: selectedTab == 3 ? "gear.circle.fill" : "gear.circle")
+                        Image(systemName: selectedTab == 4 ? "gear.circle.fill" : "gear.circle")
                             .font(.system(size: 16, weight: .medium))
                         Text("Settings")
                             .font(.system(size: 11, weight: .medium))
                     }
                 }
-                .tag(3)
+                .tag(4)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.clear)

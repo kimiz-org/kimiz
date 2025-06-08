@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct Game: Identifiable, Codable {
+internal struct Game: Identifiable, Codable {
     let id: UUID
     let name: String
     let executablePath: String

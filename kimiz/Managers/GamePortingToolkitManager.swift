@@ -10,11 +10,9 @@ import Combine
 import Foundation
 import SwiftUI
 
-// MARK: - Game Porting Toolkit Manager
-
 @MainActor
-class GamePortingToolkitManager: ObservableObject {
-    static let shared = GamePortingToolkitManager()
+internal class GamePortingToolkitManager: ObservableObject {
+    internal static let shared = GamePortingToolkitManager()
 
     @Published var isGPTKInstalled = false
     @Published var isInitializing = false
@@ -111,26 +109,125 @@ class GamePortingToolkitManager: ObservableObject {
     // MARK: - Game Management
 
     func scanForGames() async {
-        let steamPath = defaultBottlePath + "/drive_c/Program Files (x86)/Steam/steam.exe"
-
         var games: [Game] = []
 
-        if fileManager.fileExists(atPath: steamPath) {
-            var steamGame = Game(
-                name: "Steam",
-                executablePath: steamPath,
-                installPath: defaultBottlePath + "/drive_c/Program Files (x86)/Steam"
-            )
-            steamGame.isInstalled = true
-            games.append(steamGame)
-        }
+        // Scan for Steam games (actual games, not just Steam client)
+        await scanForSteamGames(&games)
 
-        // Add user games
+        // Scan for CrossOver games - scan for actual games, not platforms
+        await scanForCrossOverGames(&games)
+
+        // Add user-added games
         let userGames = loadUserGames().filter { fileManager.fileExists(atPath: $0.executablePath) }
         games.append(contentsOf: userGames)
 
         await MainActor.run {
             self.installedGames = games
+        }
+    }
+
+    private func scanForSteamGames(_ games: inout [Game]) async {
+        let steamPath = defaultBottlePath + "/drive_c/Program Files (x86)/Steam"
+        let steamExePath = "\(steamPath)/steam.exe"
+        let steamAppsPath = "\(steamPath)/steamapps/common"
+
+        // First, add Steam launcher itself if it exists
+        if fileManager.fileExists(atPath: steamExePath) {
+            let steamLauncher = Game(
+                name: "Steam",
+                executablePath: steamExePath,
+                installPath: steamPath,
+                isInstalled: true
+            )
+            games.append(steamLauncher)
+            print("Found Steam launcher at: \(steamExePath)")
+        }
+
+        // Then scan for installed Steam games
+        guard fileManager.fileExists(atPath: steamAppsPath) else {
+            print("Steam games directory not found at: \(steamAppsPath)")
+            return
+        }
+
+        do {
+            let gameDirectories = try fileManager.contentsOfDirectory(atPath: steamAppsPath)
+
+            for gameDir in gameDirectories {
+                let gamePath = "\(steamAppsPath)/\(gameDir)"
+                var isDirectory: ObjCBool = false
+
+                guard fileManager.fileExists(atPath: gamePath, isDirectory: &isDirectory),
+                    isDirectory.boolValue
+                else { continue }
+
+                // Look for the main executable in this game directory
+                if let executable = findMainExecutable(in: gamePath, gameName: gameDir) {
+                    let game = Game(
+                        name: gameDir,
+                        executablePath: executable,
+                        installPath: gamePath,
+                        isInstalled: true
+                    )
+                    games.append(game)
+                    print("Found Steam game: \(gameDir) at \(executable)")
+                }
+            }
+        } catch {
+            print("Error scanning Steam games: \(error)")
+        }
+    }
+
+    private func findMainExecutable(in gamePath: String, gameName: String) -> String? {
+        do {
+            let contents = try fileManager.contentsOfDirectory(atPath: gamePath)
+
+            // Look for executables, prioritizing ones that match the game name
+            var executables: [String] = []
+
+            for file in contents {
+                if file.hasSuffix(".exe") && !isSystemExecutable(file) {
+                    let fullPath = "\(gamePath)/\(file)"
+                    executables.append(fullPath)
+                }
+            }
+
+            // Sort executables to prioritize the main game executable
+            executables.sort { exe1, exe2 in
+                let name1 = (exe1 as NSString).lastPathComponent.lowercased()
+                let name2 = (exe2 as NSString).lastPathComponent.lowercased()
+                let gameNameLower = gameName.lowercased()
+
+                // Prioritize executables that contain the game name
+                let contains1 = name1.contains(
+                    gameNameLower.replacingOccurrences(of: " ", with: ""))
+                let contains2 = name2.contains(
+                    gameNameLower.replacingOccurrences(of: " ", with: ""))
+
+                if contains1 && !contains2 { return true }
+                if !contains1 && contains2 { return false }
+
+                // Prioritize shorter names (usually main executable)
+                return name1.count < name2.count
+            }
+
+            return executables.first
+
+        } catch {
+            print("Error finding executable in \(gamePath): \(error)")
+            return nil
+        }
+    }
+
+    private func isSystemExecutable(_ filename: String) -> Bool {
+        let systemFiles = [
+            "unins000.exe", "unins001.exe", "setup.exe", "install.exe",
+            "launcher.exe", "updater.exe", "patcher.exe", "crashreporter.exe",
+            "vcredist", "directx", "dotnetfx", "xnafx", "redist",
+        ]
+
+        let lowercaseFilename = filename.lowercased()
+        return systemFiles.contains { systemFile in
+            lowercaseFilename.contains(systemFile)
         }
     }
 
@@ -240,6 +337,14 @@ class GamePortingToolkitManager: ObservableObject {
         environment["GPTK_METAL_HUD"] = "0"  // Disable Metal HUD by default
         environment["GPTK_DYLD_FALLBACK_LIBRARY_PATH"] = "/opt/homebrew/lib:/usr/local/lib"
         environment["GPTK_METAL_VALIDATION"] = "0"  // Disable Metal validation for performance
+
+        // Graphics compatibility fixes for wkCreateImageView errors
+        environment["MTL_FORCE_VALIDATION"] = "0"  // Disable Metal validation
+        environment["METAL_DEVICE_WRAPPER_TYPE"] = "1"  // Use compatibility wrapper
+        environment["MTL_CAPTURE_ENABLED"] = "0"  // Disable Metal capture
+        environment["WINE_VK_INSTANCE_EXTENSIONS"] = ""  // Disable problematic Vulkan extensions
+        environment["DXVK_FILTER_DEVICE_NAME"] = ""  // Let DXVK choose the best device
+        environment["VK_LOADER_DEBUG"] = "error"  // Only show Vulkan errors, not info
 
         // CPU usage optimization
         environment["WINE_PTHREAD_MUTEX_DISABLE_CONSISTENCY_CHECK"] = "1"  // Reduce CPU overhead
@@ -830,10 +935,10 @@ class GamePortingToolkitManager: ObservableObject {
         saveBottles()
 
         // Scan for games in this bottle
-        await scanForCrossOverGames(in: bottle)
+        await scanForCrossOverGamesInBottle(in: bottle)
     }
 
-    private func scanForCrossOverGames(in bottle: Bottle) async {
+    private func scanForCrossOverGamesInBottle(in bottle: Bottle) async {
         let steamPath = "\(bottle.path)/drive_c/Program Files (x86)/Steam"
         let steamAppsPath = "\(steamPath)/steamapps/common"
 
@@ -885,7 +990,47 @@ class GamePortingToolkitManager: ObservableObject {
             self.installedGames.append(contentsOf: foundGames)
         }
         saveUserGames()
-    }  // MARK: - Enhanced CrossOver Integration
+    }
+
+    private func scanForCrossOverGames(_ games: inout [Game]) async {
+        // Scan all bottles for CrossOver games (actual games, not Steam platform)
+        for bottle in bottles {
+            let steamPath = "\(bottle.path)/drive_c/Program Files (x86)/Steam"
+            let steamAppsPath = "\(steamPath)/steamapps/common"
+
+            // Skip adding Steam launcher itself, only scan for actual games
+            if fileManager.fileExists(atPath: steamAppsPath) {
+                do {
+                    let gameDirectories = try fileManager.contentsOfDirectory(atPath: steamAppsPath)
+
+                    for gameDir in gameDirectories {
+                        let gamePath = "\(steamAppsPath)/\(gameDir)"
+                        var isDirectory: ObjCBool = false
+
+                        guard fileManager.fileExists(atPath: gamePath, isDirectory: &isDirectory),
+                            isDirectory.boolValue
+                        else { continue }
+
+                        // Look for the main executable in this game directory
+                        if let executable = findMainExecutable(in: gamePath, gameName: gameDir) {
+                            let game = Game(
+                                name: "\(gameDir) (CrossOver)",
+                                executablePath: executable,
+                                installPath: gamePath,
+                                isInstalled: true
+                            )
+                            games.append(game)
+                            print("Found CrossOver Steam game: \(gameDir) at \(executable)")
+                        }
+                    }
+                } catch {
+                    print("Error scanning CrossOver Steam games in bottle \(bottle.name): \(error)")
+                }
+            }
+        }
+    }
+
+    // MARK: - Enhanced CrossOver Integration
 
     func detectCrossOverBottles() async -> [String] {
         let crossOverBottlesPath =

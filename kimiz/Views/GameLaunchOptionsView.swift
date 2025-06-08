@@ -30,109 +30,250 @@ struct GameLaunchOptionsView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
+        ZStack {
+            // Modern gradient background
+            LinearGradient(
+                colors: [
+                    Color(red: 0.05, green: 0.05, blue: 0.1),
+                    Color(red: 0.1, green: 0.1, blue: 0.15),
+                    Color(red: 0.15, green: 0.1, blue: 0.2),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                // Modern header
+                modernHeaderView
+
+                // Content with glass morphism
+                ZStack {
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(.ultraThinMaterial)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20)
+                                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                        )
+
+                    ScrollView {
+                        VStack(spacing: 24) {
+                            // Game info section
+                            gameInfoSection
+
+                            // Launch arguments section
+                            launchArgumentsSection
+
+                            // Display mode section
+                            displayModeSection
+
+                            // Performance section
+                            performanceSection
+
+                            // Actions section
+                            actionsSection
+                        }
+                        .padding(24)
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
+            }
+        }
+        .frame(width: 600, height: 550)
+        .onAppear {
+            loadSavedSettings()
+        }
+    }
+
+    private var modernHeaderView: some View {
+        VStack(spacing: 16) {
             HStack {
-                Text("Launch Options: \(game.name)")
-                    .font(.headline)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Launch Options")
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+
+                    Text("Configure how \(game.name) will run")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white.opacity(0.8))
+                }
+
                 Spacer()
+
                 Button {
                     isPresented = false
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
+                        .font(.system(size: 24))
+                        .foregroundColor(.white.opacity(0.6))
                 }
                 .buttonStyle(.plain)
             }
-            .padding()
-            .background(Color(NSColor.controlBackgroundColor))
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 20)
+        .padding(.bottom, 8)
+    }
 
-            Divider()
+    private var gameInfoSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                // Game icon placeholder
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(.blue.opacity(0.2))
+                        .frame(width: 48, height: 48)
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    // Launch Arguments
-                    Group {
-                        Text("Launch Arguments")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-
-                        TextField("Optional command-line arguments", text: $launchArguments)
-                            .textFieldStyle(.roundedBorder)
-                    }
-
-                    Divider()
-
-                    // Display Mode
-                    Group {
-                        Text("Display Mode")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-
-                        Picker("Window Mode", selection: $windowMode) {
-                            ForEach(WindowMode.allCases) { mode in
-                                Text(mode.rawValue).tag(mode)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                    }
-
-                    Divider()
-
-                    // Graphics & Performance Options
-                    Group {
-                        Text("Graphics & Performance")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-
-                        Toggle("Enable DXVK (DirectX to Vulkan)", isOn: $enableDXVK)
-
-                        Toggle("Enable Esync (Event Synchronization)", isOn: $enableEsync)
-
-                        Toggle("Show Performance HUD", isOn: $showHUD)
-                    }
-
-                    if let recommendation = performanceRecommendation {
-                        Text(recommendation)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .padding(.top, 4)
-                    }
-
-                    Divider()
-
-                    Button("Save as Default") {
-                        saveAsDefault()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    Image(systemName: "gamecontroller.fill")
+                        .font(.system(size: 20))
+                        .foregroundColor(.blue)
                 }
-                .padding()
-            }
 
-            Divider()
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(game.name)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
 
-            // Footer with action buttons
-            HStack {
-                Button("Cancel") {
-                    isPresented = false
+                    Text(game.executablePath)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white.opacity(0.6))
+                        .lineLimit(1)
                 }
-                .keyboardShortcut(.escape)
 
                 Spacer()
+            }
+        }
+    }
 
-                Button("Launch Game") {
-                    launchGameWithOptions()
+    private var launchArgumentsSection: some View {
+        ModernSectionView(title: "Launch Arguments", icon: "terminal") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Add custom command-line arguments for advanced configuration")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.white.opacity(0.7))
+
+                TextField("Enter launch arguments (optional)", text: $launchArguments)
+                    .textFieldStyle(.plain)
+                    .padding(12)
+                    .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                    .foregroundColor(.white)
+            }
+        }
+    }
+
+    private var displayModeSection: some View {
+        ModernSectionView(title: "Display Mode", icon: "display") {
+            VStack(spacing: 12) {
+                Picker("Window Mode", selection: $windowMode) {
+                    ForEach(WindowMode.allCases) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
                 }
-                .buttonStyle(.borderedProminent)
+                .pickerStyle(.segmented)
+                .colorScheme(.dark)
+            }
+        }
+    }
+
+    private var performanceSection: some View {
+        ModernSectionView(title: "Graphics & Performance", icon: "speedometer") {
+            VStack(spacing: 16) {
+                ModernToggleRow(
+                    title: "DXVK Translation",
+                    subtitle: "DirectX to Vulkan for better performance",
+                    icon: "cpu",
+                    isOn: $enableDXVK
+                )
+
+                ModernToggleRow(
+                    title: "Event Synchronization",
+                    subtitle: "Esync for improved game compatibility",
+                    icon: "arrow.triangle.2.circlepath",
+                    isOn: $enableEsync
+                )
+
+                ModernToggleRow(
+                    title: "Performance HUD",
+                    subtitle: "Show real-time performance metrics",
+                    icon: "chart.line.uptrend.xyaxis",
+                    isOn: $showHUD
+                )
+
+                if let recommendation = performanceRecommendation {
+                    HStack(spacing: 8) {
+                        Image(systemName: "lightbulb.fill")
+                            .foregroundColor(.yellow)
+                            .font(.system(size: 14))
+
+                        Text(recommendation)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.white.opacity(0.8))
+                    }
+                    .padding(12)
+                    .background(.yellow.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                }
+            }
+        }
+    }
+
+    private var actionsSection: some View {
+        VStack(spacing: 16) {
+            Button {
+                saveAsDefault()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "bookmark.fill")
+                        .font(.system(size: 14))
+                    Text("Save as Default Settings")
+                        .font(.system(size: 14, weight: .medium))
+                }
+                .foregroundColor(.blue)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+            }
+            .buttonStyle(.plain)
+
+            HStack(spacing: 16) {
+                Button {
+                    isPresented = false
+                } label: {
+                    Text("Cancel")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.white.opacity(0.8))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.escape)
+
+                Button {
+                    launchGameWithOptions()
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 14))
+                        Text("Launch Game")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(
+                        LinearGradient(
+                            colors: [.blue, .purple],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        ),
+                        in: RoundedRectangle(cornerRadius: 12)
+                    )
+                }
+                .buttonStyle(.plain)
                 .keyboardShortcut(.defaultAction)
             }
-            .padding()
-        }
-        .frame(width: 500, height: 450)
-        .onAppear {
-            loadSavedSettings()
         }
     }
 
@@ -172,15 +313,4 @@ struct GameLaunchOptionsView: View {
     }
 }
 
-struct GameLaunchOptionsView_Previews: PreviewProvider {
-    static var previews: some View {
-        let game = Game(
-            name: "Sample Game",
-            executablePath: "/path/to/game.exe",
-            installPath: "/path/to/game"
-        )
-
-        GameLaunchOptionsView(game: game, isPresented: .constant(true))
-            .environmentObject(GamePortingToolkitManager.shared)
-    }
-}
+// MARK: - Supporting Components - Using shared ModernComponents

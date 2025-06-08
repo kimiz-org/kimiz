@@ -87,52 +87,58 @@ struct CompatibilityToolsView: View {
     ]
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            headerView
+        ZStack {
+            // Modern gradient background
+            LinearGradient(
+                gradient: Gradient(colors: [.black, .gray.opacity(0.8)]),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
 
-            Divider()
+            VStack(spacing: 0) {
+                // Modern header
+                modernHeaderView
 
-            // Content
-            ScrollView {
-                VStack(spacing: 24) {
-                    // Installation Progress
-                    if isInstalling {
-                        installationProgressView
+                // Content with glassmorphism
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // Installation Progress
+                        if isInstalling {
+                            modernInstallationProgressView
+                        }
+
+                        // Tool Categories
+                        ForEach(CompatibilityTool.ToolCategory.allCases, id: \.self) { category in
+                            modernToolCategorySection(category)
+                        }
+
+                        // Quick Actions
+                        modernQuickActionsSection
                     }
-
-                    // Tool Categories
-                    ForEach(CompatibilityTool.ToolCategory.allCases, id: \.self) { category in
-                        toolCategorySection(category)
-                    }
-
-                    // Quick Actions
-                    quickActionsSection
+                    .padding(24)
                 }
-                .padding(24)
+
+                // Modern footer
+                modernFooterView
             }
-
-            Divider()
-
-            // Footer
-            footerView
         }
         .frame(width: 800, height: 700)
-        .background(.regularMaterial)
         .onAppear {
             loadInstalledTools()
         }
     }
 
-    private var headerView: some View {
+    private var modernHeaderView: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 8) {
                 Text("Compatibility Tools")
-                    .font(.headline)
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(.white)
 
                 Text("Install and configure tools for better Windows software compatibility")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    .font(.system(size: 14))
+                    .foregroundColor(.white.opacity(0.7))
             }
 
             Spacer()
@@ -140,62 +146,104 @@ struct CompatibilityToolsView: View {
             Button("Close") {
                 isPresented = false
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.borderless)
+            .foregroundColor(.white.opacity(0.8))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+            )
         }
-        .padding()
+        .padding(24)
     }
 
-    private var installationProgressView: some View {
-        VStack(spacing: 12) {
+    private var modernInstallationProgressView: some View {
+        VStack(spacing: 16) {
             HStack {
-                Text("Installing: \(currentInstallation)")
-                    .font(.headline)
+                Image(systemName: "gear.badge")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.blue)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Installing: \(currentInstallation)")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+
+                    Text("\(Int(installationProgress * 100))% complete")
+                        .font(.system(size: 13))
+                        .foregroundColor(.white.opacity(0.7))
+                }
+
                 Spacer()
-                Text("\(Int(installationProgress * 100))%")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
             }
 
             ProgressView(value: installationProgress)
-                .progressViewStyle(LinearProgressViewStyle())
+                .progressViewStyle(LinearProgressViewStyle(tint: .blue))
+                .background(.white.opacity(0.2), in: RoundedRectangle(cornerRadius: 4))
         }
-        .padding()
-        .background(.ultraThinMaterial)
-        .cornerRadius(12)
+        .padding(20)
+        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+        )
     }
 
-    private func toolCategorySection(_ category: CompatibilityTool.ToolCategory) -> some View {
+    private func modernToolCategorySection(_ category: CompatibilityTool.ToolCategory) -> some View
+    {
         let categoryTools = availableTools.filter { $0.category == category }
 
         return VStack(alignment: .leading, spacing: 16) {
-            Text(category.rawValue)
-                .font(.title2)
-                .fontWeight(.semibold)
+            HStack(spacing: 8) {
+                Image(systemName: categoryIcon(for: category))
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.blue)
+
+                Text(category.rawValue)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.white)
+            }
 
             LazyVStack(spacing: 12) {
                 ForEach(categoryTools, id: \.id) { tool in
-                    CompatibilityToolCard(tool: tool, isInstalling: isInstalling) {
+                    ModernCompatibilityToolCard(tool: tool, isInstalling: isInstalling) {
                         installTool(tool)
                     }
                 }
             }
         }
+        .padding(20)
+        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+        )
     }
 
-    private var quickActionsSection: some View {
+    private var modernQuickActionsSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Quick Actions")
-                .font(.title2)
-                .fontWeight(.semibold)
+            HStack(spacing: 8) {
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.blue)
+
+                Text("Quick Actions")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.white)
+            }
 
             VStack(spacing: 12) {
-                HStack {
+                // Gaming Essentials Bundle
+                HStack(spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Gaming Essentials for GPTK")
-                            .font(.headline)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.white)
                         Text("DXVK, VKD3D, Visual C++, and Windows Fonts")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                            .font(.system(size: 13))
+                            .foregroundColor(.white.opacity(0.7))
                     }
 
                     Spacer()
@@ -203,20 +251,38 @@ struct CompatibilityToolsView: View {
                     Button("Install Bundle") {
                         installGamingEssentials()
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.borderless)
+                    .foregroundColor(.white)
+                    .font(.system(size: 14, weight: .medium))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(
+                        LinearGradient(
+                            gradient: Gradient(colors: [.blue, .blue.opacity(0.8)]),
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        ),
+                        in: RoundedRectangle(cornerRadius: 8)
+                    )
                     .disabled(isInstalling)
+                    .opacity(isInstalling ? 0.6 : 1.0)
                 }
-                .padding()
-                .background(.ultraThinMaterial)
-                .cornerRadius(12)
+                .padding(16)
+                .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                )
 
-                HStack {
+                // System Cleanup
+                HStack(spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("System Cleanup")
-                            .font(.headline)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.white)
                         Text("Clean temporary files and reset Wine prefixes")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                            .font(.system(size: 13))
+                            .foregroundColor(.white.opacity(0.7))
                     }
 
                     Spacer()
@@ -224,30 +290,76 @@ struct CompatibilityToolsView: View {
                     Button("Clean System") {
                         performSystemCleanup()
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.borderless)
+                    .foregroundColor(.white.opacity(0.8))
+                    .font(.system(size: 14, weight: .medium))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                    )
                     .disabled(isInstalling)
+                    .opacity(isInstalling ? 0.6 : 1.0)
                 }
-                .padding()
-                .background(.ultraThinMaterial)
-                .cornerRadius(12)
+                .padding(16)
+                .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                )
             }
         }
+        .padding(20)
+        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+        )
     }
 
-    private var footerView: some View {
+    private var modernFooterView: some View {
         HStack {
             Text("Tools will be installed to the default Wine prefix")
-                .font(.caption)
-                .foregroundColor(.secondary)
+                .font(.system(size: 13))
+                .foregroundColor(.white.opacity(0.6))
 
             Spacer()
 
             Button("Done") {
                 isPresented = false
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.borderless)
+            .foregroundColor(.white)
+            .font(.system(size: 14, weight: .medium))
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
+            .background(
+                LinearGradient(
+                    gradient: Gradient(colors: [.blue, .blue.opacity(0.8)]),
+                    startPoint: .leading,
+                    endPoint: .trailing
+                ),
+                in: RoundedRectangle(cornerRadius: 8)
+            )
         }
-        .padding()
+        .padding(24)
+    }
+
+    private func categoryIcon(for category: CompatibilityTool.ToolCategory) -> String {
+        switch category {
+        case .directx:
+            return "display"
+        case .vulkan:
+            return "cpu"
+        case .runtime:
+            return "gear"
+        case .codecs:
+            return "play.rectangle"
+        case .fonts:
+            return "textformat"
+        }
     }
 
     private func loadInstalledTools() {
@@ -343,7 +455,7 @@ struct CompatibilityToolsView: View {
     }
 }
 
-struct CompatibilityToolCard: View {
+struct ModernCompatibilityToolCard: View {
     let tool: CompatibilityToolsView.CompatibilityTool
     let isInstalling: Bool
     let onInstall: () -> Void
@@ -352,39 +464,43 @@ struct CompatibilityToolCard: View {
         HStack(spacing: 16) {
             // Tool Icon
             ZStack {
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: 10)
                     .fill(tool.isInstalled ? .green.opacity(0.2) : .blue.opacity(0.2))
                     .frame(width: 50, height: 50)
 
                 Image(systemName: tool.isInstalled ? "checkmark.circle.fill" : toolIcon)
-                    .font(.system(size: 24))
+                    .font(.system(size: 24, weight: .medium))
                     .foregroundColor(tool.isInstalled ? .green : .blue)
             }
 
             // Tool Info
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(tool.name)
-                    .font(.headline)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white)
 
                 Text(tool.description)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .font(.system(size: 13))
+                    .foregroundColor(.white.opacity(0.7))
+                    .lineLimit(2)
 
                 HStack {
                     Text(tool.downloadSize)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.5))
 
                     Spacer()
 
-                    HStack(spacing: 4) {
+                    HStack(spacing: 6) {
                         ForEach(tool.benefits.prefix(2), id: \.self) { benefit in
                             Text(benefit)
-                                .font(.caption2)
+                                .font(.system(size: 10, weight: .medium))
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
-                                .background(.quaternary)
-                                .cornerRadius(4)
+                                .background(
+                                    .white.opacity(0.1), in: RoundedRectangle(cornerRadius: 4)
+                                )
+                                .foregroundColor(.white.opacity(0.8))
                         }
                     }
                 }
@@ -397,19 +513,40 @@ struct CompatibilityToolCard: View {
                 Button("Installed") {
                     // Could show reinstall options
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderless)
+                .foregroundColor(.green)
+                .font(.system(size: 13, weight: .medium))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.green.opacity(0.2), in: RoundedRectangle(cornerRadius: 6))
                 .disabled(true)
             } else {
                 Button("Install") {
                     onInstall()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.borderless)
+                .foregroundColor(.white)
+                .font(.system(size: 13, weight: .medium))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [.blue, .blue.opacity(0.8)]),
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ),
+                    in: RoundedRectangle(cornerRadius: 6)
+                )
                 .disabled(isInstalling)
+                .opacity(isInstalling ? 0.6 : 1.0)
             }
         }
-        .padding()
-        .background(.ultraThinMaterial)
-        .cornerRadius(12)
+        .padding(16)
+        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+        )
     }
 
     private var toolIcon: String {

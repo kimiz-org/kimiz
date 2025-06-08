@@ -5,6 +5,7 @@
 //  Created by temidaradev on 6.06.2025.
 //
 
+import AppKit
 import Foundation
 import SwiftUI
 
@@ -22,22 +23,6 @@ struct InstallationWizardView: View {
     @State private var selectedBottle = "Default"
     @State private var isInstalling = false
     @State private var installationProgress = 0.0
-
-    struct GameTemplate {
-        let id = UUID()
-        let name: String
-        let description: String
-        let icon: String
-        let recommendedSettings: RecommendedSettings
-        let requiredComponents: [String]
-
-        struct RecommendedSettings {
-            let dxvk: Bool
-            let esync: Bool
-            let windowMode: String
-            let additionalDLLs: [String]
-        }
-    }
 
     let gameTemplates: [GameTemplate] = [
         GameTemplate(
@@ -110,103 +95,165 @@ struct InstallationWizardView: View {
     ]
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Header with Progress
-            headerView
+        ZStack {
+            // Modern gradient background
+            LinearGradient(
+                colors: [
+                    Color(red: 0.05, green: 0.05, blue: 0.1),
+                    Color(red: 0.1, green: 0.1, blue: 0.15),
+                    Color(red: 0.15, green: 0.1, blue: 0.2),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
 
-            Divider()
+            VStack(spacing: 0) {
+                // Modern header
+                modernHeaderView
 
-            // Step Content
-            stepContentView
+                // Step content with glass morphism
+                VStack(spacing: 0) {
+                    modernStepContentView
 
-            Divider()
-
-            // Navigation Footer
-            footerView
+                    // Modern footer
+                    modernFooterView
+                }
+                .background(
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(.ultraThinMaterial)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20)
+                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                        )
+                )
+                .padding(.horizontal, 24)
+                .padding(.bottom, 24)
+            }
         }
-        .frame(width: 700, height: 600)
-        .background(.regularMaterial)
+        .frame(width: 800, height: 700)
     }
 
-    private var headerView: some View {
-        VStack(spacing: 16) {
+    private var modernHeaderView: some View {
+        VStack(spacing: 20) {
             HStack {
-                Text("Installation Wizard")
-                    .font(.headline)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Installation Wizard")
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+
+                    Text("Step \(currentStep + 1) of \(steps.count): \(steps[currentStep])")
+                        .font(.system(size: 16))
+                        .foregroundColor(.white.opacity(0.8))
+                }
 
                 Spacer()
 
-                Button("Cancel") {
+                Button {
                     isPresented = false
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.white.opacity(0.8))
+                        .frame(width: 32, height: 32)
+                        .background(Color.white.opacity(0.15))
+                        .cornerRadius(8)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.borderless)
             }
 
-            // Progress Indicator
-            HStack(spacing: 8) {
-                ForEach(0..<steps.count, id: \.self) { index in
-                    HStack(spacing: 8) {
-                        Circle()
-                            .fill(index <= currentStep ? .blue : .gray.opacity(0.3))
-                            .frame(width: 12, height: 12)
-                            .overlay(
+            // Modern progress indicator
+            VStack(spacing: 12) {
+                HStack(spacing: 0) {
+                    ForEach(0..<steps.count, id: \.self) { index in
+                        HStack(spacing: 0) {
+                            ZStack {
                                 Circle()
-                                    .stroke(index == currentStep ? .blue : .clear, lineWidth: 2)
+                                    .fill(
+                                        index <= currentStep ? Color.blue : Color.white.opacity(0.3)
+                                    )
                                     .frame(width: 16, height: 16)
-                            )
 
-                        if index < steps.count - 1 {
-                            Rectangle()
-                                .fill(index < currentStep ? .blue : .gray.opacity(0.3))
-                                .frame(height: 2)
-                                .frame(maxWidth: .infinity)
+                                if index < currentStep {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundColor(.white)
+                                } else if index == currentStep {
+                                    Circle()
+                                        .fill(.white)
+                                        .frame(width: 8, height: 8)
+                                }
+                            }
+
+                            if index < steps.count - 1 {
+                                Rectangle()
+                                    .fill(
+                                        index < currentStep ? Color.blue : Color.white.opacity(0.3)
+                                    )
+                                    .frame(height: 2)
+                                    .frame(maxWidth: .infinity)
+                            }
                         }
                     }
                 }
-            }
 
-            Text("Step \(currentStep + 1): \(steps[currentStep])")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
+                HStack {
+                    ForEach(0..<steps.count, id: \.self) { index in
+                        Text(steps[index])
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(index <= currentStep ? .white : .white.opacity(0.5))
+                            .frame(maxWidth: .infinity, alignment: .center)
+                    }
+                }
+            }
         }
-        .padding()
+        .padding(.horizontal, 28)
+        .padding(.top, 24)
+        .padding(.bottom, 16)
     }
 
     @ViewBuilder
-    private var stepContentView: some View {
+    private var modernStepContentView: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: 32) {
                 switch currentStep {
                 case 0:
-                    templateSelectionStep
+                    modernTemplateSelectionStep
                 case 1:
-                    executableSelectionStep
+                    modernExecutableSelectionStep
                 case 2:
-                    configurationStep
+                    modernConfigurationStep
                 case 3:
-                    installationStep
+                    modernInstallationStep
                 default:
                     EmptyView()
                 }
             }
-            .padding(24)
+            .padding(.horizontal, 28)
+            .padding(.vertical, 32)
         }
+        .frame(maxHeight: 400)
     }
 
-    private var templateSelectionStep: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("Choose a Template")
-                .font(.title2)
-                .fontWeight(.semibold)
+    private var modernTemplateSelectionStep: some View {
+        VStack(alignment: .leading, spacing: 28) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Choose Application Template")
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
 
-            Text(
-                "Select a template that best matches your application type for optimal configuration"
-            )
-            .foregroundColor(.secondary)
+                Text(
+                    "Select a template that best matches your application type for optimal GPTK configuration"
+                )
+                .font(.system(size: 16))
+                .foregroundColor(.white.opacity(0.8))
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+            }
 
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 200))], spacing: 16) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 220))], spacing: 16) {
                 ForEach(gameTemplates, id: \.id) { template in
-                    GameTemplateCard(
+                    ModernGameTemplateCard(
                         template: template,
                         isSelected: selectedGameTemplate?.id == template.id
                     ) {
@@ -221,195 +268,429 @@ struct InstallationWizardView: View {
         }
     }
 
-    private var executableSelectionStep: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("Select Executable")
-                .font(.title2)
-                .fontWeight(.semibold)
+    private var modernExecutableSelectionStep: some View {
+        VStack(alignment: .leading, spacing: 28) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Select Windows Executable")
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
 
-            Text("Choose the Windows executable you want to install")
-                .foregroundColor(.secondary)
+                Text("Choose the Windows .exe file you want to install and run with GPTK")
+                    .font(.system(size: 16))
+                    .foregroundColor(.white.opacity(0.8))
+            }
 
-            VStack(spacing: 16) {
-                if let executable = selectedExecutable {
-                    HStack {
-                        Image(systemName: "doc.badge.gearshape")
-                            .font(.system(size: 32))
-                            .foregroundColor(.blue)
+            if let executable = selectedExecutable {
+                // Selected executable display
+                VStack(spacing: 20) {
+                    HStack(spacing: 16) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.blue.opacity(0.2))
+                                .frame(width: 60, height: 60)
 
-                        VStack(alignment: .leading) {
+                            Image(systemName: "doc.badge.gearshape.fill")
+                                .font(.system(size: 28, weight: .medium))
+                                .foregroundColor(.blue)
+                        }
+
+                        VStack(alignment: .leading, spacing: 6) {
                             Text(executable.lastPathComponent)
-                                .font(.headline)
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.white)
+
                             Text(executable.path)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .lineLimit(1)
+                                .font(.system(size: 14))
+                                .foregroundColor(.white.opacity(0.7))
+                                .lineLimit(2)
                         }
 
                         Spacer()
-
-                        Button("Change") {
-                            // Show file picker
-                        }
-                        .buttonStyle(.bordered)
                     }
-                    .padding()
-                    .background(.ultraThinMaterial)
-                    .cornerRadius(12)
+                    .padding(20)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color.white.opacity(0.1))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(Color.blue.opacity(0.5), lineWidth: 2)
+                            )
+                    )
 
-                    // Auto-fill game name
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Application Name")
-                            .font(.headline)
-
-                        TextField("Enter application name", text: $gameName)
-                            .textFieldStyle(.roundedBorder)
-                            .onAppear {
-                                if gameName.isEmpty {
-                                    gameName = executable.deletingPathExtension().lastPathComponent
-                                }
-                            }
+                    Button {
+                        selectExecutable()
+                    } label: {
+                        Text("Choose Different File")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(Color.white.opacity(0.15))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                                    )
+                            )
                     }
-                } else {
-                    Button("Choose Executable File") {
-                        // Show file picker
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                }
-            }
-        }
-    }
-
-    private var configurationStep: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("Configure Settings")
-                .font(.title2)
-                .fontWeight(.semibold)
-
-            if let template = selectedGameTemplate {
-                HStack {
-                    Image(systemName: template.icon)
-                        .foregroundColor(.blue)
-                    Text("Template: \(template.name)")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                }
-                .padding(.bottom)
-            }
-
-            VStack(spacing: 16) {
-                GroupBox("GPTK Bottle") {
-                    Picker("Bottle", selection: $selectedBottle) {
-                        Text("Default GPTK").tag("Default")
-                        Text("Gaming GPTK").tag("Gaming")
-                        Text("Create New...").tag("New")
-                    }
-                    .pickerStyle(.menu)
-                }
-
-                GroupBox("Graphics & Performance") {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Toggle("Enable DXVK (DirectX to Vulkan for GPTK)", isOn: $enableDXVK)
-                        Toggle("Enable Esync (GPTK Event Synchronization)", isOn: $enableEsync)
-                    }
-                }
-
-                if let template = selectedGameTemplate {
-                    GroupBox("Required Components") {
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 150))], spacing: 8) {
-                            ForEach(template.requiredComponents, id: \.self) { component in
-                                HStack {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundColor(.green)
-                                    Text(component)
-                                        .font(.caption)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private var installationStep: some View {
-        VStack(spacing: 20) {
-            if isInstalling {
-                VStack(spacing: 16) {
-                    Text("Installing \(gameName)")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-
-                    ProgressView(value: installationProgress)
-                        .progressViewStyle(LinearProgressViewStyle())
-
-                    Text("\(Int(installationProgress * 100))% Complete")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                    .buttonStyle(.borderless)
                 }
             } else {
-                VStack(spacing: 16) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 48))
-                        .foregroundColor(.green)
+                // File selection area
+                VStack(spacing: 24) {
+                    VStack(spacing: 16) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.1))
+                                .frame(width: 80, height: 80)
 
-                    Text("Ready to Install")
-                        .font(.title2)
-                        .fontWeight(.semibold)
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 40, weight: .medium))
+                                .foregroundColor(.white.opacity(0.6))
+                        }
 
-                    Text("All settings have been configured. Click Install to proceed.")
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
+                        VStack(spacing: 8) {
+                            Text("No executable selected")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.white)
+
+                            Text("Click below to browse for a Windows .exe file")
+                                .font(.system(size: 14))
+                                .foregroundColor(.white.opacity(0.7))
+                        }
+                    }
+
+                    Button {
+                        selectExecutable()
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "folder")
+                                .font(.system(size: 16, weight: .medium))
+                            Text("Browse for Executable")
+                                .font(.system(size: 16, weight: .medium))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(
+                            LinearGradient(
+                                colors: [Color.blue, Color.purple],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .cornerRadius(12)
+                    }
+                    .buttonStyle(.borderless)
+                }
+                .padding(40)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color.white.opacity(0.05))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                        )
+                )
+            }
+        }
+    }
+
+    private var modernConfigurationStep: some View {
+        VStack(alignment: .leading, spacing: 28) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Configure Installation")
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+
+                Text("Customize settings for optimal performance with your application")
+                    .font(.system(size: 16))
+                    .foregroundColor(.white.opacity(0.8))
+            }
+
+            VStack(spacing: 20) {
+                // Game name input
+                ModernSectionView(title: "Application Details") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Application Name")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.white.opacity(0.8))
+
+                        TextField("Enter application name", text: $gameName)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 16))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color.white.opacity(0.1))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                    )
+                            )
+                    }
+                }
+
+                // Performance settings
+                ModernSectionView(title: "Performance Settings") {
+                    VStack(spacing: 16) {
+                        ModernToggleRow(
+                            title: "Enable DXVK",
+                            subtitle: "DirectX to Vulkan translation layer for better performance",
+                            isOn: $enableDXVK
+                        )
+
+                        ModernToggleRow(
+                            title: "Enable Esync",
+                            subtitle: "Event synchronization for improved compatibility",
+                            isOn: $enableEsync
+                        )
+                    }
+                }
+
+                // Bottle selection
+                ModernSectionView(title: "Bottle Configuration") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Target Bottle")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.white.opacity(0.8))
+
+                        Menu {
+                            Button("Default") { selectedBottle = "Default" }
+                            Button("Gaming") { selectedBottle = "Gaming" }
+                            Button("Create New...") { selectedBottle = "New" }
+                        } label: {
+                            HStack {
+                                Text(selectedBottle)
+                                    .foregroundColor(.white)
+                                Spacer()
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.6))
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color.white.opacity(0.1))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                    )
+                            )
+                        }
+                        .buttonStyle(.borderless)
+                    }
                 }
             }
         }
     }
 
-    private var footerView: some View {
-        HStack {
-            if currentStep > 0 {
-                Button("Back") {
-                    currentStep -= 1
+    private var modernInstallationStep: some View {
+        VStack(spacing: 32) {
+            if isInstalling {
+                // Installation in progress
+                VStack(spacing: 24) {
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .tint(.blue)
+
+                        Text("Installing Application...")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(.white)
+
+                        Text("Setting up GPTK environment and configuring application")
+                            .font(.system(size: 16))
+                            .foregroundColor(.white.opacity(0.8))
+                            .multilineTextAlignment(.center)
+                    }
+
+                    VStack(spacing: 12) {
+                        ProgressView(value: installationProgress)
+                            .tint(.blue)
+                            .scaleEffect(y: 2)
+
+                        Text("\(Int(installationProgress * 100))% Complete")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.white.opacity(0.8))
+                    }
                 }
-                .buttonStyle(.bordered)
+                .padding(40)
+            } else {
+                // Installation summary
+                VStack(alignment: .leading, spacing: 24) {
+                    Text("Ready to Install")
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+
+                    VStack(spacing: 16) {
+                        InstallationSummaryRow(
+                            label: "Application",
+                            value: gameName.isEmpty
+                                ? selectedExecutable?.lastPathComponent ?? "Unknown" : gameName
+                        )
+                        InstallationSummaryRow(
+                            label: "Template",
+                            value: selectedGameTemplate?.name ?? "None"
+                        )
+                        InstallationSummaryRow(
+                            label: "Bottle",
+                            value: selectedBottle
+                        )
+                        InstallationSummaryRow(
+                            label: "DXVK",
+                            value: enableDXVK ? "Enabled" : "Disabled"
+                        )
+                        InstallationSummaryRow(
+                            label: "Esync",
+                            value: enableEsync ? "Enabled" : "Disabled"
+                        )
+                    }
+                    .padding(20)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.white.opacity(0.1))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                            )
+                    )
+                }
+            }
+        }
+    }
+
+    private var modernFooterView: some View {
+        HStack(spacing: 16) {
+            if currentStep > 0 {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        currentStep -= 1
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 14, weight: .medium))
+                        Text("Back")
+                            .font(.system(size: 16, weight: .medium))
+                    }
+                    .foregroundColor(.white.opacity(0.8))
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.white.opacity(0.1))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                            )
+                    )
+                }
+                .buttonStyle(.borderless)
             }
 
             Spacer()
 
             if currentStep < steps.count - 1 {
-                Button("Next") {
-                    currentStep += 1
+                Button {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        currentStep += 1
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Text("Continue")
+                            .font(.system(size: 16, weight: .medium))
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 14, weight: .medium))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 12)
+                    .background(
+                        LinearGradient(
+                            colors: [Color.blue, Color.purple],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .cornerRadius(10)
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(!canProceedToNextStep)
+                .buttonStyle(.borderless)
+                .disabled(!canContinue)
             } else {
-                Button(isInstalling ? "Installing..." : "Install") {
-                    performInstallation()
+                Button {
+                    startInstallation()
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 14, weight: .medium))
+                        Text("Install")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 12)
+                    .background(
+                        LinearGradient(
+                            colors: [Color.green, Color.blue],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .cornerRadius(10)
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(isInstalling || !canProceedToNextStep)
+                .buttonStyle(.borderless)
+                .disabled(isInstalling || !canInstall)
             }
         }
-        .padding()
+        .padding(.horizontal, 28)
+        .padding(.vertical, 20)
     }
 
-    private var canProceedToNextStep: Bool {
+    // MARK: - Computed Properties
+
+    private var canContinue: Bool {
         switch currentStep {
         case 0:
             return selectedGameTemplate != nil
         case 1:
-            return selectedExecutable != nil && !gameName.isEmpty
-        case 2:
-            return true
-        case 3:
             return selectedExecutable != nil
+        case 2:
+            return !gameName.isEmpty
         default:
             return false
         }
     }
 
-    private func performInstallation() {
+    private var canInstall: Bool {
+        return selectedExecutable != nil && !gameName.isEmpty && selectedGameTemplate != nil
+    }
+
+    // MARK: - Helper Methods
+
+    private func selectExecutable() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowedContentTypes = [.executable]
+        panel.allowsOtherFileTypes = true
+        panel.title = "Select Windows Executable"
+        panel.message = "Choose a Windows .exe file to install"
+
+        if panel.runModal() == .OK {
+            selectedExecutable = panel.url
+            if gameName.isEmpty, let url = panel.url {
+                gameName = url.deletingPathExtension().lastPathComponent
+            }
+        }
+    }
+
+    private func startInstallation() {
         guard let executable = selectedExecutable else { return }
 
         isInstalling = true
@@ -422,7 +703,7 @@ struct InstallationWizardView: View {
                     await MainActor.run {
                         installationProgress = Double(i) / 10.0
                     }
-                    try await Task.sleep(nanoseconds: 300_000_000)  // 0.3 seconds
+                    try await Task.sleep(nanoseconds: 300_000_000)
                 }
 
                 // Create the game
@@ -441,13 +722,13 @@ struct InstallationWizardView: View {
                             $0.path == gamePortingToolkitManager.getDefaultBottlePath()
                         }
                         ?? GamePortingToolkitManager.Bottle(
-                            name: "Default", path: gamePortingToolkitManager.getDefaultBottlePath())
+                            name: "Default",
+                            path: gamePortingToolkitManager.getDefaultBottlePath()
+                        )
 
                     for component in template.requiredComponents {
                         try await gamePortingToolkitManager.installDependency(
-                            component,
-                            for: bottle
-                        )
+                            component, for: bottle)
                     }
                 }
 
@@ -462,41 +743,6 @@ struct InstallationWizardView: View {
                 }
             }
         }
-    }
-}
-
-struct GameTemplateCard: View {
-    let template: InstallationWizardView.GameTemplate
-    let isSelected: Bool
-    let onSelect: () -> Void
-
-    var body: some View {
-        Button(action: onSelect) {
-            VStack(spacing: 12) {
-                Image(systemName: template.icon)
-                    .font(.system(size: 32))
-                    .foregroundColor(isSelected ? .white : .blue)
-
-                Text(template.name)
-                    .font(.headline)
-                    .foregroundColor(isSelected ? .white : .primary)
-
-                Text(template.description)
-                    .font(.caption)
-                    .foregroundColor(isSelected ? .white.opacity(0.8) : .secondary)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-            }
-            .padding()
-            .frame(maxWidth: .infinity, minHeight: 120)
-            .background(isSelected ? Color.blue : Color.secondary.opacity(0.1))
-            .cornerRadius(12)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color.blue : Color.clear, lineWidth: 2)
-            )
-        }
-        .buttonStyle(.plain)
     }
 }
 

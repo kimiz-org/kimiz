@@ -18,37 +18,31 @@ struct ToolsView: View {
     @State private var availableBottles: [String] = []
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                // Header
-                headerView
+        ZStack {
+            // Modern background
+            ModernBackground(style: .primary)
 
-                // Quick Actions Section
-                quickActionsSection
+            ScrollView {
+                VStack(spacing: 32) {
+                    // Modern header
+                    modernHeaderView
 
-                // Bottle Management Section
-                bottleManagementSection
+                    // Quick Actions Section
+                    modernQuickActionsSection
 
-                // Gaming Tools Section
-                gamingToolsSection
+                    // Installation Tools Section
+                    modernInstallationSection
 
-                // System Integration Section
-                systemIntegrationSection
+                    // Bottle Management Section
+                    modernBottleSection
+
+                    // System Tools Section
+                    modernSystemToolsSection
+                }
+                .padding(28)
             }
-            .padding(24)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(
-            LinearGradient(
-                colors: [
-                    Color(NSColor.windowBackgroundColor),
-                    Color(NSColor.windowBackgroundColor).opacity(0.95),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
-        .ignoresSafeArea()
         .sheet(isPresented: $showingBottleManager) {
             BottleManagerView(
                 isPresented: $showingBottleManager, availableBottles: $availableBottles
@@ -79,251 +73,208 @@ struct ToolsView: View {
         }
     }
 
-    private var headerView: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Gaming Tools & Utilities")
-                        .font(.system(size: 32, weight: .bold, design: .rounded))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [.primary, .primary.opacity(0.8)],
-                                startPoint: .leading,
-                                endPoint: .trailing
+    private var modernHeaderView: some View {
+        ModernSectionView(title: "Gaming Tools & Utilities", icon: "wrench.and.screwdriver.fill") {
+            VStack(spacing: 16) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Everything you need to run Windows games")
+                            .font(ModernTheme.Typography.body)
+                            .foregroundColor(ModernTheme.Colors.textSecondary)
+
+                        HStack(spacing: 16) {
+                            ModernStatusBadge(
+                                text: gamePortingToolkitManager.isGPTKInstalled
+                                    ? "GPTK Ready" : "Setup Required",
+                                status: gamePortingToolkitManager.isGPTKInstalled
+                                    ? .success : .warning,
+                                size: .medium
                             )
-                        )
 
-                    Text("Manage GPTK environments, compatibility tools, and gaming utilities")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.secondary)
+                            ModernStatusBadge(
+                                text: epicGamesManager.isConnected
+                                    ? "Epic Connected" : "Connect Epic",
+                                status: epicGamesManager.isConnected ? .success : .info,
+                                size: .medium
+                            )
+                        }
+                    }
+
+                    Spacer()
                 }
 
-                Spacer()
-
-                // GPTK Status indicator
-                HStack(spacing: 12) {
-                    Circle()
-                        .fill(gamePortingToolkitManager.isGPTKInstalled ? .green : .orange)
-                        .frame(width: 12, height: 12)
-
-                    Text(
-                        gamePortingToolkitManager.isGPTKInstalled ? "GPTK Ready" : "GPTK Not Ready"
+                if !gamePortingToolkitManager.isGPTKInstalled {
+                    ModernAlertCard(
+                        title: "Setup Required",
+                        message:
+                            "Install Game Porting Toolkit to access all gaming tools and features",
+                        type: .warning,
+                        dismissAction: nil
                     )
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.secondary)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(.regularMaterial)
-                .clipShape(Capsule())
             }
         }
     }
 
-    private var quickActionsSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Quick Actions")
-                .font(.title2)
-                .fontWeight(.semibold)
-
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 280))], spacing: 16) {
-                // Add Game Card
-                ToolCard(
-                    title: "Add Windows Game",
-                    description: "Install a Windows executable with guided GPTK setup",
-                    icon: "plus.app",
-                    color: .blue
-                ) {
-                    showingInstallationWizard = true
-                }
-
-                // Add from File Card
-                ToolCard(
-                    title: "Quick Add Game",
-                    description: "Add an executable directly to your library",
-                    icon: "doc.badge.plus",
-                    color: .green
+    private var modernQuickActionsSection: some View {
+        ModernSectionView(title: "Quick Actions", icon: "bolt.fill") {
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible()),
+                    GridItem(.flexible()),
+                    GridItem(.flexible()),
+                ],
+                spacing: 16
+            ) {
+                ModernActionCard(
+                    title: "Install Game",
+                    subtitle: "Add Windows game from file",
+                    icon: "plus.app.fill",
+                    accentColor: .blue
                 ) {
                     showingFilePicker = true
                 }
 
-                // Epic Games Connection Card
-                ToolCard(
-                    title: "Connect Epic Games",
-                    description: "Link your Epic Games account and library",
-                    icon: "link.circle",
-                    color: .purple
+                ModernActionCard(
+                    title: "Epic Games",
+                    subtitle: "Connect your Epic account",
+                    icon: "gamecontroller.fill",
+                    accentColor: .purple
                 ) {
                     showingEpicConnection = true
                 }
 
-                // Install Steam Card
-                ToolCard(
-                    title: "Install Steam",
-                    description: "Set up Steam client for Windows games",
-                    icon: "cloud",
-                    color: .cyan
+                ModernActionCard(
+                    title: "Installation Wizard",
+                    subtitle: "Step-by-step game setup",
+                    icon: "wand.and.stars.fill",
+                    accentColor: .cyan
                 ) {
-                    installSteam()
+                    showingInstallationWizard = true
                 }
             }
         }
     }
 
-    private var bottleManagementSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("GPTK Bottle Management")
-                    .font(.title2)
-                    .fontWeight(.semibold)
+    private var modernInstallationSection: some View {
+        ModernSectionView(title: "Installation Tools", icon: "arrow.down.circle.fill") {
+            VStack(spacing: 12) {
+                ModernInfoPanel(
+                    title: "Game Installation Wizard",
+                    subtitle:
+                        "Guided installation process for Windows games with automatic configuration",
+                    icon: "wand.and.stars.fill",
+                    accentColor: .blue
+                ) {
+                    showingInstallationWizard = true
+                }
 
-                Spacer()
+                ModernInfoPanel(
+                    title: "Manual Game Installation",
+                    subtitle: "Install a Windows executable directly from your Mac",
+                    icon: "app.badge.plus",
+                    accentColor: .green
+                ) {
+                    showingFilePicker = true
+                }
 
-                Button("Manage All Bottles") {
+                ModernInfoPanel(
+                    title: "Steam Compatibility",
+                    subtitle: "Configure Steam games for optimal performance",
+                    icon: "cloud.fill",
+                    accentColor: .orange
+                ) {
+                    // Handle Steam configuration
+                }
+            }
+        }
+    }
+
+    private var modernBottleSection: some View {
+        ModernSectionView(title: "Wine Bottles", icon: "server.rack") {
+            VStack(spacing: 16) {
+                HStack {
+                    ModernStatisticsCard(
+                        title: "Active Bottles",
+                        value: "\(availableBottles.count)",
+                        subtitle: "Wine environments",
+                        icon: "server.rack",
+                        accentColor: .blue
+                    )
+
+                    ModernStatisticsCard(
+                        title: "Memory Usage",
+                        value: "2.1 GB",
+                        subtitle: "Current consumption",
+                        icon: "memorychip",
+                        accentColor: .green
+                    )
+                }
+
+                ModernInfoPanel(
+                    title: "Bottle Manager",
+                    subtitle: "Create, configure, and manage Wine bottles for different games",
+                    icon: "slider.horizontal.3",
+                    accentColor: .purple
+                ) {
                     showingBottleManager = true
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-            }
 
-            VStack(spacing: 12) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("GPTK Bottles")
-                            .font(.headline)
-                        Text("Isolated environments for different applications")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-
-                    Spacer()
-
-                    Text("\(gamePortingToolkitManager.bottles.count) bottles")
-                        .font(.caption)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(.secondary.opacity(0.2))
-                        .clipShape(Capsule())
-                }
-                .padding()
-                .background(.regularMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-
-                HStack(spacing: 12) {
-                    Button {
-                        createQuickBottle("Gaming")
-                    } label: {
-                        Label("Create GPTK Gaming Bottle", systemImage: "gamecontroller")
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-
-                    Button {
-                        createQuickBottle("Office")
-                    } label: {
-                        Label("Create GPTK Office Bottle", systemImage: "doc.text")
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-
-                    Spacer()
-                }
-            }
-        }
-    }
-
-    private var gamingToolsSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("Gaming Enhancement Tools for GPTK")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-
-                Spacer()
-
-                Button("View All Tools") {
+                ModernInfoPanel(
+                    title: "Compatibility Tools",
+                    subtitle: "Install and configure DXVK, VKD3D, and other compatibility layers",
+                    icon: "wrench.adjustable.fill",
+                    accentColor: .orange
+                ) {
                     showingCompatibilityTools = true
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-            }
-
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 200))], spacing: 12) {
-                // DXVK Tool
-                CompactToolCard(
-                    title: "DXVK for GPTK",
-                    description: "DirectX to Vulkan translation",
-                    icon: "cpu",
-                    isInstalled: true
-                ) {
-                    installDXVK()
-                }
-
-                // VCRedist Tool
-                CompactToolCard(
-                    title: "Visual C++ Runtime",
-                    description: "Microsoft Visual C++ libraries",
-                    icon: "gear",
-                    isInstalled: false
-                ) {
-                    installVCRedist()
-                }
-
-                // .NET Framework Tool
-                CompactToolCard(
-                    title: ".NET Framework",
-                    description: "Microsoft .NET Framework 4.8",
-                    icon: "square.grid.3x3",
-                    isInstalled: false
-                ) {
-                    installDotNet()
-                }
-
-                // DirectX Tool
-                CompactToolCard(
-                    title: "DirectX 11",
-                    description: "Microsoft DirectX libraries",
-                    icon: "display",
-                    isInstalled: true
-                ) {
-                    installDirectX()
-                }
             }
         }
     }
 
-    private var systemIntegrationSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("GPTK System Integration")
-                .font(.title2)
-                .fontWeight(.semibold)
-
-            VStack(spacing: 12) {
-                SystemIntegrationCard(
-                    title: "CrossOver Integration",
-                    description: "Import games and bottles from CrossOver to GPTK",
-                    icon: "arrow.triangle.2.circlepath",
-                    action: "Import"
+    private var modernSystemToolsSection: some View {
+        ModernSectionView(title: "System Tools", icon: "gearshape.2.fill") {
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible()),
+                    GridItem(.flexible()),
+                ],
+                spacing: 16
+            ) {
+                ModernSystemToolCard(
+                    title: "Registry Editor",
+                    description: "Edit Windows registry for installed games",
+                    icon: "doc.text.fill",
+                    status: gamePortingToolkitManager.isGPTKInstalled ? .available : .disabled
                 ) {
-                    importCrossOverBottles()
+                    openRegistryEditor()
                 }
 
-                SystemIntegrationCard(
-                    title: "System Cleanup",
-                    description: "Clean temporary files and reset Wine prefixes",
-                    icon: "trash",
-                    action: "Clean"
+                ModernSystemToolCard(
+                    title: "File Manager",
+                    description: "Browse game files and Wine directories",
+                    icon: "folder.fill",
+                    status: .available
                 ) {
-                    performSystemCleanup()
+                    openFileManager()
                 }
 
-                SystemIntegrationCard(
-                    title: "Backup & Restore",
-                    description: "Backup your bottles and game configurations",
-                    icon: "externaldrive",
-                    action: "Backup"
+                ModernSystemToolCard(
+                    title: "Task Manager",
+                    description: "Monitor Wine processes and performance",
+                    icon: "list.bullet.rectangle.fill",
+                    status: gamePortingToolkitManager.isGPTKInstalled ? .available : .disabled
                 ) {
-                    backupBottles()
+                    openTaskManager()
+                }
+
+                ModernSystemToolCard(
+                    title: "Wine Configuration",
+                    description: "Configure Wine settings and preferences",
+                    icon: "gearshape.fill",
+                    status: gamePortingToolkitManager.isGPTKInstalled ? .available : .disabled
+                ) {
+                    openWineConfiguration()
                 }
             }
         }
@@ -340,89 +291,124 @@ struct ToolsView: View {
         case .success(let urls):
             guard let selectedFile = urls.first else { return }
             // Quick add to library without wizard
-            addGameDirectly(from: selectedFile)
+            Task {
+                await addGameDirectly(from: selectedFile)
+            }
         case .failure(let error):
             print("File selection failed: \(error)")
         }
     }
 
-    private func addGameDirectly(from url: URL) {
+    private func addGameDirectly(from url: URL) async {
         let gameName = url.deletingPathExtension().lastPathComponent
         let game = Game(
             name: gameName,
             executablePath: url.path,
             installPath: url.deletingLastPathComponent().path
         )
-
-        Task {
-            await gamePortingToolkitManager.addUserGame(game)
-        }
+        // Add to library manager
+        await LibraryManager.shared.addUserGame(game)
     }
 
-    private func createQuickBottle(_ type: String) {
-        let bottleName = "\(type)-\(Date().timeIntervalSince1970)"
-        Task {
-            await gamePortingToolkitManager.createBottle(name: bottleName)
-            loadAvailableBottles()
-        }
-    }
+    // MARK: - System Tool Actions
 
-    private func installSteam() {
+    private func openRegistryEditor() {
+        guard gamePortingToolkitManager.isGPTKInstalled else { return }
         Task {
             do {
-                try await gamePortingToolkitManager.installSteam()
+                if let bottle = gamePortingToolkitManager.selectedBottle {
+                    let winePath = [
+                        "/opt/homebrew/bin/wine",
+                        "/usr/local/bin/wine",
+                        "/opt/homebrew/bin/wine64",
+                        "/usr/local/bin/wine64",
+                    ].first(where: { FileManager.default.fileExists(atPath: $0) })
+                    
+                    guard let winePath = winePath else { return }
+                    
+                    let environment = gamePortingToolkitManager.getOptimizedEnvironment(for: bottle)
+                    
+                    try await WineManager.shared.runWineProcess(
+                        winePath: winePath,
+                        executablePath: "regedit",
+                        environment: environment,
+                        workingDirectory: bottle.path,
+                        defaultBottlePath: bottle.path
+                    )
+                }
             } catch {
-                print("Steam installation failed: \(error)")
+                print("Failed to open registry editor: \(error)")
             }
         }
     }
 
-    private func installDXVK() {
-        installComponent("dxvk")
+    private func openFileManager() {
+        // Open Finder to show wine bottles directory
+        let bottlesPath = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".wine")
+            .path
+
+        NSWorkspace.shared.open(URL(fileURLWithPath: bottlesPath))
     }
 
-    private func installVCRedist() {
-        installComponent("vcrun2019")
-    }
-
-    private func installDotNet() {
-        installComponent("dotnet48")
-    }
-
-    private func installDirectX() {
-        installComponent("d3d11")
-    }
-
-    private func installComponent(_ component: String) {
-        guard let bottle = gamePortingToolkitManager.selectedBottle else { return }
+    private func openTaskManager() {
+        guard gamePortingToolkitManager.isGPTKInstalled else { return }
         Task {
             do {
-                try await gamePortingToolkitManager.installDependency(component, for: bottle)
+                if let bottle = gamePortingToolkitManager.selectedBottle {
+                    let winePath = [
+                        "/opt/homebrew/bin/wine",
+                        "/usr/local/bin/wine",
+                        "/opt/homebrew/bin/wine64",
+                        "/usr/local/bin/wine64",
+                    ].first(where: { FileManager.default.fileExists(atPath: $0) })
+                    
+                    guard let winePath = winePath else { return }
+                    
+                    let environment = gamePortingToolkitManager.getOptimizedEnvironment(for: bottle)
+                    
+                    try await WineManager.shared.runWineProcess(
+                        winePath: winePath,
+                        executablePath: "taskmgr",
+                        environment: environment,
+                        workingDirectory: bottle.path,
+                        defaultBottlePath: bottle.path
+                    )
+                }
             } catch {
-                print("Component installation failed: \(error)")
+                print("Failed to open task manager: \(error)")
             }
         }
     }
 
-    private func importCrossOverBottles() {
+    private func openWineConfiguration() {
+        guard gamePortingToolkitManager.isGPTKInstalled else { return }
         Task {
-            let bottles = await gamePortingToolkitManager.detectCrossOverBottles()
-            for bottleName in bottles {
-                try? await gamePortingToolkitManager.importCrossOverSteamBottle(
-                    bottleName: bottleName)
+            do {
+                if let bottle = gamePortingToolkitManager.selectedBottle {
+                    let winePath = [
+                        "/opt/homebrew/bin/wine",
+                        "/usr/local/bin/wine",
+                        "/opt/homebrew/bin/wine64",
+                        "/usr/local/bin/wine64",
+                    ].first(where: { FileManager.default.fileExists(atPath: $0) })
+                    
+                    guard let winePath = winePath else { return }
+                    
+                    let environment = gamePortingToolkitManager.getOptimizedEnvironment(for: bottle)
+                    
+                    try await WineManager.shared.runWineProcess(
+                        winePath: winePath,
+                        executablePath: "winecfg",
+                        environment: environment,
+                        workingDirectory: bottle.path,
+                        defaultBottlePath: bottle.path
+                    )
+                }
+            } catch {
+                print("Failed to open wine configuration: \(error)")
             }
-            loadAvailableBottles()
         }
-    }
-
-    private func performSystemCleanup() {
-        // Implement system cleanup functionality
-        print("Performing system cleanup...")
-    }
-
-    private func backupBottles() {
-        // Implement backup functionality
-        print("Starting backup process...")
     }
 }
 

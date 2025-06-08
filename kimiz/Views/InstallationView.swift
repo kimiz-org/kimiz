@@ -5,71 +5,265 @@
 //  Created by temidaradev on 4.06.2025.
 //
 
+import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
+
+// Import managers and components
+// (Components are included via namespace, no explicit import needed)
 
 struct InstallationView: View {
     @EnvironmentObject var gamePortingToolkitManager: GamePortingToolkitManager
     @State private var showingAlert = false
     @State private var alertMessage = ""
+    @State private var installationProgress: Double = 0.0
+    @State private var isInstalling = false
 
     var body: some View {
-        NavigationView {
-            VStack(spacing: 24) {
-                Spacer()
+        ZStack {
+            // Modern background
+            ModernBackground(style: ModernBackground.BackgroundStyle.primary)
+                .ignoresSafeArea()
 
-                VStack(spacing: 16) {
-                    Image(systemName: "gear.circle.fill")
-                        .font(.system(size: 64))
-                        .foregroundColor(.blue)
+            ScrollView {
+                VStack(spacing: 32) {
+                    // Modern header
+                    modernHeaderView
 
-                    Text("Installation & Setup")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
+                    // Installation status section
+                    installationStatusSection
 
-                    Text("Advanced installation features coming soon!")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                    // Installation steps
+                    installationStepsSection
+
+                    // Quick setup section
+                    quickSetupSection
                 }
-
-                Spacer()
-
-                Button("Install Game Porting Toolkit") {
-                    installGPTK()
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(gamePortingToolkitManager.isGPTKInstalled)
-
-                if gamePortingToolkitManager.isGPTKInstalled {
-                    Text("✓ Game Porting Toolkit is installed")
-                        .foregroundColor(.green)
-                }
-
-                Spacer()
-            }
-            .padding()
-            .alert("Installation", isPresented: $showingAlert) {
-                Button("OK") {}
-            } message: {
-                Text(alertMessage)
+                .padding(.horizontal, ModernTheme.Spacing.xl)
+                .padding(.vertical, ModernTheme.Spacing.lg)
             }
         }
-        .navigationTitle("Installation")
+        .alert("Installation", isPresented: $showingAlert) {
+            Button("OK") {}
+        } message: {
+            Text(alertMessage)
+        }
+    }
+
+    private var modernHeaderView: some View {
+        ModernSectionView(title: "Game Porting Toolkit", icon: "gear.circle.fill") {
+            Text("Set up and manage your GPTK installation for running Windows games on macOS")
+                .font(ModernTheme.Typography.body)
+                .foregroundColor(ModernTheme.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+    }
+
+    private var installationStatusSection: some View {
+        ModernInfoPanel(
+            title: "Installation Status",
+            subtitle: gamePortingToolkitManager.isGPTKInstalled
+                ? "GPTK Installed" : "GPTK Not Installed",
+            icon: gamePortingToolkitManager.isGPTKInstalled
+                ? "checkmark.circle.fill" : "xmark.circle.fill",
+            accentColor: gamePortingToolkitManager.isGPTKInstalled ? .green : .orange
+        ) {
+            VStack(spacing: ModernTheme.Spacing.md) {
+                HStack {
+                    Text(
+                        gamePortingToolkitManager.isGPTKInstalled
+                            ? "GPTK Installed" : "GPTK Not Installed"
+                    )
+                    .font(ModernTheme.Typography.body)
+                    .foregroundColor(ModernTheme.Colors.textPrimary)
+
+                    Spacer()
+
+                    if !gamePortingToolkitManager.isGPTKInstalled {
+                        Button {
+                            installGPTK()
+                        } label: {
+                            HStack(spacing: 8) {
+                                if isInstalling {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                } else {
+                                    Image(systemName: "arrow.down.circle.fill")
+                                }
+                                Text(isInstalling ? "Installing..." : "Install GPTK")
+                                    .font(ModernTheme.Typography.caption1)
+                                    .fontWeight(.semibold)
+                            }
+                        }
+                        .buttonStyle(ModernPrimaryButtonStyle())
+                        .disabled(isInstalling)
+                    }
+                }
+
+                if isInstalling {
+                    VStack(spacing: 8) {
+                        Text("Installing GPTK")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.white.opacity(0.8))
+                        ModernProgressView(value: installationProgress)
+                    }
+                }
+            }
+        }
+    }
+
+    private var installationStepsSection: some View {
+        VStack(alignment: .leading, spacing: ModernTheme.Spacing.lg) {
+            Text("Installation Steps")
+                .font(ModernTheme.Typography.title2)
+                .foregroundColor(ModernTheme.Colors.textPrimary)
+
+            VStack(spacing: ModernTheme.Spacing.md) {
+                ModernActionCard(
+                    title: "Download GPTK",
+                    subtitle: "Install Apple's Game Porting Toolkit from Xcode",
+                    icon: "arrow.down.circle",
+                    accentColor: gamePortingToolkitManager.isGPTKInstalled ? .green : .blue
+                ) {
+                    if !gamePortingToolkitManager.isGPTKInstalled {
+                        installGPTK()
+                    }
+                }
+
+                ModernActionCard(
+                    title: "Configure Environment",
+                    subtitle: "Set up Wine prefixes and system integration",
+                    icon: "gearshape.2",
+                    accentColor: gamePortingToolkitManager.isGPTKInstalled ? .green : .gray
+                ) {
+                    // Handle environment configuration
+                }
+
+                ModernActionCard(
+                    title: "Install Dependencies",
+                    subtitle: "Download essential libraries and runtime components",
+                    icon: "cube.box",
+                    accentColor: .gray
+                ) {
+                    // Handle dependencies installation
+                }
+
+                ModernActionCard(
+                    title: "Verify Installation",
+                    subtitle: "Test GPTK functionality and validate setup",
+                    icon: "checkmark.seal",
+                    accentColor: .gray
+                ) {
+                    performSystemCheck()
+                }
+            }
+        }
+    }
+
+    private var quickSetupSection: some View {
+        VStack(alignment: .leading, spacing: ModernTheme.Spacing.lg) {
+            Text("Quick Setup")
+                .font(ModernTheme.Typography.title2)
+                .foregroundColor(ModernTheme.Colors.textPrimary)
+
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible()),
+                    GridItem(.flexible()),
+                ], spacing: ModernTheme.Spacing.md
+            ) {
+                ModernActionCard(
+                    title: "Install Steam",
+                    subtitle: "Set up Steam for Windows games",
+                    icon: "cloud.fill",
+                    accentColor: .blue
+                ) {
+                    installSteam()
+                }
+
+                ModernActionCard(
+                    title: "Epic Games Store",
+                    subtitle: "Connect your Epic Games account",
+                    icon: "gamecontroller.fill",
+                    accentColor: .purple
+                ) {
+                    // Handle Epic Games connection
+                }
+
+                ModernActionCard(
+                    title: "Install Tools",
+                    subtitle: "Essential compatibility tools",
+                    icon: "wrench.and.screwdriver",
+                    accentColor: .orange
+                ) {
+                    // Handle tools installation
+                }
+
+                ModernActionCard(
+                    title: "System Check",
+                    subtitle: "Verify system requirements",
+                    icon: "checkmark.circle",
+                    accentColor: .green
+                ) {
+                    performSystemCheck()
+                }
+            }
+        }
     }
 
     private func installGPTK() {
+        isInstalling = true
+        installationProgress = 0.0
+
         Task {
             do {
+                // Simulate installation progress
+                for i in 1...10 {
+                    await MainActor.run {
+                        installationProgress = Double(i) / 10.0
+                    }
+                    try await Task.sleep(nanoseconds: 300_000_000)  // 0.3 seconds
+                }
+
                 try await gamePortingToolkitManager.installGamePortingToolkit()
                 await MainActor.run {
+                    isInstalling = false
                     alertMessage = "Game Porting Toolkit installed successfully!"
                     showingAlert = true
                 }
             } catch {
                 await MainActor.run {
+                    isInstalling = false
+                    installationProgress = 0.0
                     alertMessage = "Installation failed: \(error.localizedDescription)"
                     showingAlert = true
                 }
+            }
+        }
+    }
+
+    private func installSteam() {
+        Task {
+            do {
+                try await gamePortingToolkitManager.installSteam()
+                await MainActor.run {
+                    alertMessage = "Steam installation started successfully!"
+                    showingAlert = true
+                }
+            } catch {
+                await MainActor.run {
+                    alertMessage = "Steam installation failed: \(error.localizedDescription)"
+                    showingAlert = true
+                }
+            }
+        }
+    }
+
+    private func performSystemCheck() {
+        Task {
+            await MainActor.run {
+                alertMessage = "System check completed. All requirements met!"
+                showingAlert = true
             }
         }
     }

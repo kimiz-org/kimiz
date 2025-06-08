@@ -29,166 +29,303 @@ struct BottleManagerView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            headerView
+        ZStack {
+            // Modern gradient background
+            LinearGradient(
+                colors: [
+                    Color(NSColor.windowBackgroundColor),
+                    Color(NSColor.windowBackgroundColor).opacity(0.95),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
 
-            Divider()
+            VStack(spacing: 0) {
+                // Modern header
+                modernHeaderView
 
-            // Content
-            ScrollView {
-                VStack(spacing: 24) {
-                    // Create New Bottle Section
-                    createBottleSection
+                Divider()
 
-                    // Existing Bottles
-                    existingBottlesSection
+                // Content
+                ScrollView {
+                    VStack(spacing: 28) {
+                        // Create New Bottle Section
+                        createBottleSection
+
+                        // Existing Bottles
+                        existingBottlesSection
+                    }
+                    .padding(28)
                 }
-                .padding(24)
+
+                Divider()
+
+                // Modern footer
+                modernFooterView
             }
-
-            Divider()
-
-            // Footer
-            footerView
         }
-        .frame(width: 700, height: 600)
+        .frame(width: 800, height: 700)
         .background(.regularMaterial)
         .onAppear {
             loadBottleConfigurations()
         }
     }
 
-    private var headerView: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Game Porting Toolkit Bottle Manager")
-                    .font(.headline)
+    private var modernHeaderView: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Bottle Manager")
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [.primary, .primary.opacity(0.8)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
 
-                Text("Create and manage isolated GPTK environments for different applications")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    Text("Create and manage isolated GPTK environments for different applications")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+
+                Button {
+                    isPresented = false
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 24))
+                        .foregroundColor(.secondary)
+                        .background(.regularMaterial, in: Circle())
+                }
+                .buttonStyle(.plain)
             }
-
-            Spacer()
-
-            Button("Close") {
-                isPresented = false
-            }
-            .buttonStyle(.plain)
         }
-        .padding()
+        .padding(.horizontal, 28)
+        .padding(.vertical, 20)
+        .background(.ultraThinMaterial.opacity(0.8))
     }
 
     private var createBottleSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Create New Bottle")
-                .font(.title2)
-                .fontWeight(.semibold)
+        VStack(alignment: .leading, spacing: 20) {
+            HStack {
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 20))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.blue, .purple],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
 
-            VStack(spacing: 12) {
-                HStack {
-                    Text("Bottle Name:")
-                        .frame(width: 100, alignment: .leading)
+                Text("Create New Bottle")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+            }
 
-                    TextField("Enter bottle name", text: $newBottleName)
+            VStack(spacing: 20) {
+                // Bottle name input
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Bottle Name")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.secondary)
+
+                    TextField("Enter bottle name (e.g., MyGameBottle)", text: $newBottleName)
                         .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 14))
                 }
 
-                HStack {
-                    Text("Template:")
-                        .frame(width: 100, alignment: .leading)
+                // Template selection
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Template")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.secondary)
 
                     Picker("Template", selection: $selectedBottle) {
-                        Text("Gaming (GPTK + DirectX, DXVK)").tag("gaming")
-                        Text("Office (GPTK Default)").tag("office")
-                        Text("Development (GPTK + Visual C++)").tag("development")
-                        Text("Minimal (Clean GPTK)").tag("minimal")
+                        HStack {
+                            Image(systemName: "gamecontroller.fill")
+                            Text("Gaming (GPTK + DirectX, DXVK)")
+                        }.tag("gaming")
+
+                        HStack {
+                            Image(systemName: "doc.text.fill")
+                            Text("Office (GPTK Default)")
+                        }.tag("office")
+
+                        HStack {
+                            Image(systemName: "hammer.fill")
+                            Text("Development (GPTK + Visual C++)")
+                        }.tag("development")
+
+                        HStack {
+                            Image(systemName: "cube")
+                            Text("Minimal (Clean GPTK)")
+                        }.tag("minimal")
                     }
                     .pickerStyle(.menu)
-
-                    Spacer()
                 }
 
+                // Create button
                 HStack {
                     Spacer()
 
-                    Button("Create Bottle") {
+                    if isCreatingBottle {
+                        HStack(spacing: 12) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Creating bottle...")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+
+                    Button {
                         createNewBottle()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 14, weight: .medium))
+                            Text("Create Bottle")
+                                .font(.system(size: 14, weight: .semibold))
+                        }
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(newBottleName.isEmpty || isCreatingBottle)
-
-                    if isCreatingBottle {
-                        ProgressView()
-                            .controlSize(.small)
-                    }
                 }
             }
-            .padding()
-            .background(.ultraThinMaterial)
-            .cornerRadius(12)
         }
+        .padding(24)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.regularMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
+        )
     }
 
     private var existingBottlesSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 20) {
             HStack {
+                Image(systemName: "tray.2.fill")
+                    .font(.system(size: 20))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.green, .cyan],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+
                 Text("Existing Bottles")
                     .font(.title2)
                     .fontWeight(.semibold)
 
                 Spacer()
 
-                Button("Refresh") {
+                Button {
                     loadBottleConfigurations()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 12, weight: .medium))
+                        Text("Refresh")
+                            .font(.system(size: 12, weight: .medium))
+                    }
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
             }
 
             if bottleConfigurations.isEmpty {
-                VStack(spacing: 12) {
-                    Image(systemName: "tray")
-                        .font(.system(size: 48))
-                        .foregroundColor(.secondary)
+                VStack(spacing: 16) {
+                    ZStack {
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [.gray.opacity(0.1), .gray.opacity(0.05)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 80, height: 80)
 
-                    Text("No bottles found")
-                        .font(.headline)
-                        .foregroundColor(.secondary)
+                        Image(systemName: "tray")
+                            .font(.system(size: 32, weight: .medium))
+                            .foregroundColor(.secondary)
+                    }
 
-                    Text("Create your first bottle to get started")
-                        .font(.subheadline)
+                    VStack(spacing: 8) {
+                        Text("No bottles found")
+                            .font(.system(size: 18, weight: .semibold))
+
+                        Text(
+                            "Create your first bottle to get started with isolated GPTK environments"
+                        )
+                        .font(.system(size: 14))
                         .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                    }
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 40)
             } else {
-                LazyVStack(spacing: 12) {
+                LazyVStack(spacing: 16) {
                     ForEach(Array(bottleConfigurations.values), id: \.name) { config in
-                        BottleCardView(config: config) {
+                        ModernBottleCard(config: config) {
                             deleteBottle(config.name)
                         }
                     }
                 }
             }
         }
+        .padding(24)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.regularMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
+        )
     }
 
-    private var footerView: some View {
-        HStack {
-            Text("Bottles are isolated GPTK environments that don't interfere with each other")
-                .font(.caption)
-                .foregroundColor(.secondary)
+    private var modernFooterView: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "info.circle.fill")
+                    .font(.system(size: 12))
+                    .foregroundColor(.blue)
 
-            Spacer()
+                Text("Bottles are isolated GPTK environments that don't interfere with each other")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.secondary)
 
-            Button("Done") {
-                isPresented = false
+                Spacer()
             }
-            .buttonStyle(.borderedProminent)
+
+            HStack {
+                Spacer()
+
+                Button {
+                    isPresented = false
+                } label: {
+                    HStack(spacing: 8) {
+                        Text("Done")
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+            }
         }
-        .padding()
+        .padding(.horizontal, 28)
+        .padding(.vertical, 16)
+        .background(.ultraThinMaterial.opacity(0.8))
     }
 
     private func createNewBottle() {
@@ -320,6 +457,152 @@ struct BottleCardView: View {
         return formatter
     }
 }
+
+// MARK: - Modern Bottle Card Component
+
+struct ModernBottleCard: View {
+    let config: BottleManagerView.BottleConfig
+    let onDelete: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 16) {
+            // Bottle icon and status
+            VStack(spacing: 8) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(
+                            LinearGradient(
+                                colors: [.blue.opacity(0.1), .purple.opacity(0.1)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 60, height: 60)
+
+                    Image(systemName: "cube.fill")
+                        .font(.system(size: 24, weight: .medium))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [.blue, .purple],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                }
+
+                Circle()
+                    .fill(.green)
+                    .frame(width: 8, height: 8)
+            }
+
+            // Bottle information
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(config.name)
+                        .font(.system(size: 16, weight: .semibold))
+
+                    Spacer()
+
+                    Text(config.winVersion)
+                        .font(.system(size: 12, weight: .medium))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
+                        .foregroundColor(.blue)
+                }
+
+                HStack(spacing: 16) {
+                    Label("\(config.gamesCount) games", systemImage: "gamecontroller.fill")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.secondary)
+
+                    Label(config.architecture, systemImage: "cpu")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.secondary)
+
+                    Label(
+                        "Created \(config.dateCreated, formatter: relativeDateFormatter)",
+                        systemImage: "calendar"
+                    )
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.secondary)
+                }
+
+                // Components
+                if !config.components.isEmpty {
+                    HStack {
+                        Text("Components:")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.secondary)
+
+                        ForEach(config.components.prefix(3), id: \.self) { component in
+                            Text(component)
+                                .font(.system(size: 10, weight: .medium))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(
+                                    Color.gray.opacity(0.5),
+                                    in: RoundedRectangle(cornerRadius: 4)
+                                )
+                                .foregroundColor(.secondary)
+                        }
+
+                        if config.components.count > 3 {
+                            Text("+\(config.components.count - 3)")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+            }
+
+            Spacer()
+
+            // Actions
+            VStack(spacing: 8) {
+                Button {
+                    // Open bottle action
+                } label: {
+                    Image(systemName: "folder.fill")
+                        .font(.system(size: 14))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
+                Button {
+                    onDelete()
+                } label: {
+                    Image(systemName: "trash.fill")
+                        .font(.system(size: 14))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .tint(.red)
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.gray.opacity(isHovered ? 0.3 : 0.1))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.gray.opacity(0.5), lineWidth: 1)
+        )
+        .scaleEffect(isHovered ? 1.02 : 1.0)
+        .animation(.easeInOut(duration: 0.2), value: isHovered)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+    }
+}
+
+private let relativeDateFormatter: RelativeDateTimeFormatter = {
+    let formatter = RelativeDateTimeFormatter()
+    formatter.unitsStyle = .abbreviated
+    return formatter
+}()
 
 #Preview {
     BottleManagerView(

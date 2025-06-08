@@ -5,8 +5,12 @@
 //  Created by temidaradev on 4.06.2025.
 //
 
+import AppKit
 import Foundation
 import SwiftUI
+
+// Import modern components
+// Note: ModernTheme, ModernComponents, and ModernButtonStyle are defined in the Views/Components directory
 
 struct OnboardingView: View {
     @EnvironmentObject var gamePortingToolkitManager: GamePortingToolkitManager
@@ -18,17 +22,9 @@ struct OnboardingView: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                // Modern gradient background
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.05, green: 0.05, blue: 0.1),
-                        Color(red: 0.1, green: 0.1, blue: 0.15),
-                        Color(red: 0.15, green: 0.1, blue: 0.2),
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
+                // Modern background
+                ModernBackground(style: .primary)
+                    .ignoresSafeArea()
 
                 // Content
                 VStack(spacing: 0) {
@@ -40,15 +36,7 @@ struct OnboardingView: View {
                         modernHeaderView
 
                         // Main content card
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 24)
-                                .fill(.ultraThinMaterial)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 24)
-                                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                                )
-                                .frame(maxWidth: 520, maxHeight: 600)
-
+                        ModernCardView {
                             if gamePortingToolkitManager.isGPTKInstalled {
                                 successView
                             } else if isInstalling
@@ -61,13 +49,14 @@ struct OnboardingView: View {
                                 setupRequiredView
                             }
                         }
+                        .frame(maxWidth: 520, maxHeight: 600)
                     }
 
                     // Bottom spacer for balanced layout
                     Spacer()
                 }
-                .padding(.horizontal, 30)
-                .padding(.vertical, 20)
+                .padding(.horizontal, ModernTheme.Spacing.extraLarge)
+                .padding(.vertical, ModernTheme.Spacing.large)
             }
         }
         .onAppear {
@@ -86,40 +75,34 @@ struct OnboardingView: View {
 
     // MARK: - Views
     private var modernHeaderView: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: ModernTheme.Spacing.md) {
             Text("kimiz")
-                .font(.system(size: 42, weight: .ultraLight, design: .rounded))
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [.white, .white.opacity(0.8)],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
+                .font(ModernTheme.Typography.largeTitle)
+                .foregroundStyle(LinearGradient.modernPrimary)
 
             Text("Windows Gaming on Mac")
-                .font(.system(size: 16, weight: .medium))
-                .foregroundColor(.white.opacity(0.7))
+                .font(ModernTheme.Typography.body)
+                .foregroundColor(ModernTheme.Colors.textSecondary)
         }
         .frame(maxWidth: .infinity)
     }
 
     private var successView: some View {
-        VStack(spacing: 28) {
-            VStack(spacing: 18) {
+        VStack(spacing: ModernTheme.Spacing.xxxl) {
+            VStack(spacing: ModernTheme.Spacing.md) {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 64))
                     .foregroundColor(.green)
                     .symbolEffect(.pulse.byLayer)
 
-                VStack(spacing: 10) {
+                VStack(spacing: ModernTheme.Spacing.sm) {
                     Text("Ready to Game!")
-                        .font(.system(size: 28, weight: .semibold, design: .rounded))
-                        .foregroundColor(.white)
+                        .font(ModernTheme.Typography.title1)
+                        .foregroundColor(ModernTheme.Colors.textPrimary)
 
                     Text("Game Porting Toolkit is installed and ready to use.")
-                        .font(.system(size: 16))
-                        .foregroundColor(.white.opacity(0.8))
+                        .font(ModernTheme.Typography.body)
+                        .foregroundColor(ModernTheme.Colors.textSecondary)
                         .multilineTextAlignment(.center)
                 }
             }
@@ -127,74 +110,77 @@ struct OnboardingView: View {
             Button("Continue to kimiz") {
                 completeOnboarding()
             }
-            .buttonStyle(ModernButtonStyle(color: .green))
+            .buttonStyle(ModernPrimaryButtonStyle())
+            .controlSize(.large)
         }
         .frame(maxWidth: 400)
-        .padding(.vertical, 28)
-        .padding(.horizontal, 24)
+        .padding(.vertical, ModernTheme.Spacing.xxxl)
+        .padding(.horizontal, ModernTheme.Spacing.xl)
     }
 
     private var installingView: some View {
-        VStack(spacing: 28) {
-            VStack(spacing: 18) {
+        VStack(spacing: ModernTheme.Spacing.xxxl) {
+            VStack(spacing: ModernTheme.Spacing.md) {
                 Image(systemName: "gear.badge")
                     .font(.system(size: 64))
                     .foregroundColor(.cyan)
                     .symbolEffect(.pulse.byLayer, options: .repeat(.continuous))
 
-                VStack(spacing: 10) {
+                VStack(spacing: ModernTheme.Spacing.sm) {
                     Text("Installing Game Porting Toolkit")
-                        .font(.system(size: 24, weight: .semibold, design: .rounded))
-                        .foregroundColor(.white)
+                        .font(ModernTheme.Typography.title2)
+                        .foregroundColor(ModernTheme.Colors.textPrimary)
                         .multilineTextAlignment(.center)
 
                     Text("This may take several minutes. Please keep the app open.")
-                        .font(.system(size: 14))
-                        .foregroundColor(.white.opacity(0.8))
+                        .font(ModernTheme.Typography.caption1)
+                        .foregroundColor(ModernTheme.Colors.textSecondary)
                         .multilineTextAlignment(.center)
                 }
             }
 
-            VStack(spacing: 16) {
-                ProgressView(value: gamePortingToolkitManager.installationProgress)
-                    .progressViewStyle(LinearProgressViewStyle(tint: Color.cyan))
-                    .frame(maxWidth: 280)
+            ModernProgressView(
+                value: gamePortingToolkitManager.installationProgress,
+                total: 1.0,
+                showPercentage: true,
+                accentColor: .blue,
+                height: 8
+            )
 
-                Text(gamePortingToolkitManager.installationStatus)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.white.opacity(0.9))
-                    .multilineTextAlignment(.center)
-            }
+            Text(gamePortingToolkitManager.installationStatus)
+                .font(ModernTheme.Typography.caption1)
+                .foregroundColor(ModernTheme.Colors.textSecondary)
+                .multilineTextAlignment(.center)
         }
         .frame(maxWidth: 400)
-        .padding(.vertical, 28)
-        .padding(.horizontal, 24)
+        .padding(.vertical, ModernTheme.Spacing.xxxl)
+        .padding(.horizontal, ModernTheme.Spacing.xl)
     }
 
     private func errorView(_ error: String) -> some View {
-        VStack(spacing: 28) {
-            VStack(spacing: 18) {
+        VStack(spacing: ModernTheme.Spacing.xxxl) {
+            VStack(spacing: ModernTheme.Spacing.md) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.system(size: 64))
                     .foregroundColor(.orange)
 
-                VStack(spacing: 10) {
+                VStack(spacing: ModernTheme.Spacing.sm) {
                     Text("Installation Failed")
-                        .font(.system(size: 24, weight: .semibold, design: .rounded))
-                        .foregroundColor(.white)
+                        .font(ModernTheme.Typography.title2)
+                        .foregroundColor(ModernTheme.Colors.textPrimary)
 
                     Text(error)
-                        .font(.system(size: 14))
-                        .foregroundColor(.white.opacity(0.8))
+                        .font(ModernTheme.Typography.caption1)
+                        .foregroundColor(ModernTheme.Colors.textSecondary)
                         .multilineTextAlignment(.center)
                 }
             }
 
-            VStack(spacing: 12) {
+            VStack(spacing: ModernTheme.Spacing.md) {
                 Button("Try Again") {
                     retryInstallation()
                 }
-                .buttonStyle(ModernButtonStyle(color: Color.cyan))
+                .buttonStyle(ModernPrimaryButtonStyle())
 
                 Button("Manual Setup Guide") {
                     if let url = URL(
@@ -203,59 +189,53 @@ struct OnboardingView: View {
                         NSWorkspace.shared.open(url)
                     }
                 }
-                .buttonStyle(ModernButtonStyle(color: Color.gray, style: .secondary))
+                .buttonStyle(ModernSecondaryButtonStyle())
             }
         }
         .frame(maxWidth: 400)
-        .padding(.vertical, 28)
-        .padding(.horizontal, 24)
+        .padding(.vertical, ModernTheme.Spacing.xxxl)
+        .padding(.horizontal, ModernTheme.Spacing.xl)
     }
 
     private var setupRequiredView: some View {
-        VStack(spacing: 28) {
-            VStack(spacing: 18) {
+        VStack(spacing: ModernTheme.Spacing.xxxl) {
+            VStack(spacing: ModernTheme.Spacing.md) {
                 Image(systemName: "gamecontroller.fill")
                     .font(.system(size: 64))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [.cyan, .blue, .purple],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+                    .foregroundStyle(LinearGradient.modernPrimary)
                     .symbolEffect(.pulse.byLayer, options: .repeat(.continuous))
 
-                VStack(spacing: 10) {
+                VStack(spacing: ModernTheme.Spacing.sm) {
                     Text("Welcome to kimiz")
-                        .font(.system(size: 28, weight: .semibold, design: .rounded))
-                        .foregroundColor(.white)
+                        .font(ModernTheme.Typography.title1)
+                        .foregroundColor(ModernTheme.Colors.textPrimary)
 
                     Text(
                         "Game Porting Toolkit or Wine is required to run Windows games on your Mac.\nYou must also create at least one bottle to continue."
                     )
-                    .font(.system(size: 16))
-                    .foregroundColor(.white.opacity(0.8))
+                    .font(ModernTheme.Typography.body)
+                    .foregroundColor(ModernTheme.Colors.textSecondary)
                     .multilineTextAlignment(.center)
                 }
             }
 
-            VStack(spacing: 12) {
+            VStack(spacing: ModernTheme.Spacing.md) {
                 Button("Create New Bottle") {
                     Task {
                         await gamePortingToolkitManager.createBottle(name: "MyBottle")
                     }
                 }
-                .buttonStyle(ModernButtonStyle(color: Color.purple))
+                .buttonStyle(ModernPrimaryButtonStyle())
 
                 Button("Install Wine and Dependencies") {
                     installWineAndDependencies()
                 }
-                .buttonStyle(ModernButtonStyle(color: Color.green))
+                .buttonStyle(ModernSecondaryButtonStyle())
 
                 Button("Install Game Porting Toolkit") {
                     startInstallation()
                 }
-                .buttonStyle(ModernButtonStyle(color: Color.cyan))
+                .buttonStyle(ModernOutlineButtonStyle())
 
                 Button("Manual Installation Guide") {
                     if let url = URL(
@@ -264,33 +244,36 @@ struct OnboardingView: View {
                         NSWorkspace.shared.open(url)
                     }
                 }
-                .buttonStyle(ModernButtonStyle(color: Color.gray, style: .secondary))
+                .buttonStyle(ModernSecondaryButtonStyle())
             }
             if !gamePortingToolkitManager.bottles.isEmpty {
-                VStack(spacing: 8) {
-                    Text("Your Bottles:")
-                        .font(.headline)
-                        .foregroundColor(.white.opacity(0.8))
-                    ForEach(gamePortingToolkitManager.bottles) { bottle in
-                        HStack {
-                            Text(bottle.name)
-                                .foregroundColor(.white)
-                            Spacer()
-                            Text(bottle.path)
-                                .font(.caption2)
-                                .foregroundColor(.gray)
+                ModernInfoPanel(
+                    title: "Your Bottles",
+                    icon: "cylinder",
+                    iconColor: .blue
+                ) {
+                    VStack(spacing: ModernTheme.Spacing.small) {
+                        ForEach(gamePortingToolkitManager.bottles) { bottle in
+                            HStack {
+                                Text(bottle.name)
+                                    .foregroundColor(ModernTheme.Colors.textPrimary)
+                                Spacer()
+                                Text(bottle.path)
+                                    .font(ModernTheme.Typography.caption)
+                                    .foregroundColor(ModernTheme.Colors.textSecondary)
+                            }
+                            .padding(ModernTheme.Spacing.small)
+                            .background(Color.white.opacity(0.05))
+                            .cornerRadius(ModernTheme.CornerRadius.medium)
                         }
-                        .padding(6)
-                        .background(Color.white.opacity(0.05))
-                        .cornerRadius(8)
                     }
                 }
                 .frame(maxWidth: 400)
             }
         }
         .frame(maxWidth: 400)
-        .padding(.vertical, 28)
-        .padding(.horizontal, 24)
+        .padding(.vertical, ModernTheme.Spacing.xxxl)
+        .padding(.horizontal, ModernTheme.Spacing.xl)
     }
 
     // MARK: - Actions

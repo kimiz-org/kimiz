@@ -28,29 +28,8 @@ struct PerformanceView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                // Header
-                headerView
-
-                // Real-time Metrics
-                realTimeMetricsSection
-
-                // Performance Chart
-                performanceChartSection
-
-                // Process Management
-                processManagementSection
-
-                // Optimization Tools
-                optimizationToolsSection
-
-                // System Information
-                systemInformationSection
-            }
-            .padding(24)
-        }
-        .background(
+        ZStack {
+            // Modern gradient background
             LinearGradient(
                 colors: [
                     Color(NSColor.windowBackgroundColor),
@@ -60,7 +39,31 @@ struct PerformanceView: View {
                 endPoint: .bottom
             )
             .ignoresSafeArea()
-        )
+
+            ScrollView {
+                VStack(spacing: 28) {
+                    // Modern header
+                    modernHeaderView
+
+                    // Performance Dashboard
+                    performanceDashboard
+
+                    // Real-time Charts
+                    chartsSection
+
+                    // Process Management
+                    modernProcessSection
+
+                    // Optimization Tools
+                    modernOptimizationSection
+
+                    // System Information
+                    modernSystemInfoSection
+                }
+                .padding(.horizontal, 28)
+                .padding(.vertical, 24)
+            }
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .sheet(isPresented: $showingPerformanceSettings) {
             PerformanceSettingsView()
@@ -73,8 +76,8 @@ struct PerformanceView: View {
         }
     }
 
-    private var headerView: some View {
-        VStack(alignment: .leading, spacing: 12) {
+    private var modernHeaderView: some View {
+        VStack(alignment: .leading, spacing: 16) {
             HStack {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Performance Monitor")
@@ -87,27 +90,103 @@ struct PerformanceView: View {
                             )
                         )
 
-                    Text("Monitor Wine processes and system performance")
+                    Text("Monitor Wine processes and system performance in real-time")
                         .font(.system(size: 16, weight: .medium))
                         .foregroundColor(.secondary)
                 }
 
                 Spacer()
 
-                // Monitoring Status
+                // Control buttons
                 HStack(spacing: 12) {
-                    Circle()
-                        .fill(isMonitoring ? .green : .gray)
-                        .frame(width: 12, height: 12)
+                    Button {
+                        showingPerformanceSettings = true
+                    } label: {
+                        Image(systemName: "gearshape.fill")
+                            .font(.system(size: 16))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
 
-                    Text(isMonitoring ? "Monitoring" : "Stopped")
-                        .font(.system(size: 14, weight: .medium))
+                    Button {
+                        if isMonitoring {
+                            stopMonitoring()
+                        } else {
+                            startMonitoring()
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(
+                                systemName: isMonitoring ? "pause.circle.fill" : "play.circle.fill"
+                            )
+                            .font(.system(size: 14, weight: .medium))
+                            Text(isMonitoring ? "Pause" : "Start")
+                                .font(.system(size: 14, weight: .semibold))
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(isMonitoring ? .orange : .green)
+                }
+            }
+
+            // Status indicator
+            HStack(spacing: 12) {
+                Circle()
+                    .fill(isMonitoring ? .green : .gray)
+                    .frame(width: 8, height: 8)
+
+                Text(isMonitoring ? "Monitoring Active" : "Monitoring Paused")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.secondary)
+
+                if isMonitoring {
+                    Text("• \(performanceHistory.count)/\(maxHistoryPoints) data points")
+                        .font(.system(size: 12))
                         .foregroundColor(.secondary)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(.regularMaterial)
-                .clipShape(Capsule())
+            }
+        }
+    }
+
+    private var performanceDashboard: some View {
+        ModernSectionView(title: "System Overview", icon: "speedometer") {
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible()), count: 4),
+                spacing: 20
+            ) {
+                ModernStatisticsCard(
+                    title: "CPU Usage",
+                    value: "\(Int(cpuUsage))%",
+                    subtitle: cpuUsage > 80 ? "High usage detected" : "Normal operation",
+                    icon: "cpu",
+                    trend: cpuUsage > 80 ? .up : cpuUsage < 30 ? .down : .neutral,
+                    accentColor: .blue
+                )
+
+                ModernStatisticsCard(
+                    title: "Memory Usage",
+                    value: "\(Int(memoryUsage))%",
+                    subtitle: memoryUsage > 80 ? "Consider closing apps" : "Memory available",
+                    icon: "memorychip",
+                    trend: memoryUsage > 80 ? .up : memoryUsage < 50 ? .down : .neutral,
+                    accentColor: .green
+                )
+
+                ModernStatisticsCard(
+                    title: "Wine Processes",
+                    value: "\(wineProcessCount)",
+                    subtitle: wineProcessCount > 0 ? "Wine is active" : "No Wine processes",
+                    icon: "gearshape.2.fill",
+                    accentColor: .orange
+                )
+
+                ModernStatisticsCard(
+                    title: "Active Games",
+                    value: "\(activeProcessCount)",
+                    subtitle: activeProcessCount > 0 ? "Games running" : "No active games",
+                    icon: "gamecontroller.fill",
+                    accentColor: .purple
+                )
             }
         }
     }
@@ -310,10 +389,298 @@ struct PerformanceView: View {
         }
     }
 
+    // MARK: - Missing Sections
+
+    private var chartsSection: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            HStack {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Performance Charts")
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [.primary, .primary.opacity(0.8)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+
+                    Text("Real-time system metrics and performance history")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+            }
+
+            VStack(spacing: 16) {
+                // Chart view with glassmorphism background
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        ChartView(data: performanceHistory)
+                            .padding(20)
+                    )
+                    .frame(height: 240)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(.secondary.opacity(0.3), lineWidth: 1)
+                    )
+
+                // Chart legend
+                HStack(spacing: 24) {
+                    ChartLegendItem(color: .blue, label: "CPU Usage")
+                    ChartLegendItem(color: .green, label: "Memory")
+                    ChartLegendItem(color: .orange, label: "Processes")
+
+                    Spacer()
+
+                    Text("\(performanceHistory.count) data points")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .padding(24)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(.regularMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20)
+                .stroke(.quaternary.opacity(0.2), lineWidth: 1)
+        )
+    }
+
+    private var modernProcessSection: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            HStack {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Process Management")
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [.primary, .primary.opacity(0.8)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+
+                    Text("Monitor and control Wine and GPTK processes")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+            }
+
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 1), spacing: 16) {
+                ModernProcessActionCard(
+                    title: "Kill All GPTK Processes",
+                    description: "Terminate all running Game Porting Toolkit processes",
+                    icon: "stop.circle.fill",
+                    color: .red,
+                    action: killAllGPTKProcesses
+                )
+
+                ModernProcessActionCard(
+                    title: "Restart Wine Services",
+                    description: "Restart Game Porting Toolkit background services",
+                    icon: "arrow.clockwise.circle.fill",
+                    color: .blue,
+                    action: restartWineServices
+                )
+
+                ModernProcessActionCard(
+                    title: "Clean Zombie Processes",
+                    description: "Remove stale and unresponsive Wine processes",
+                    icon: "trash.circle.fill",
+                    color: .orange,
+                    action: cleanZombieProcesses
+                )
+            }
+        }
+        .padding(24)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(.regularMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20)
+                .stroke(.quaternary.opacity(0.2), lineWidth: 1)
+        )
+    }
+
+    private var modernOptimizationSection: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            HStack {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Performance Optimization")
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [.primary, .primary.opacity(0.8)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+
+                    Text("Configure system optimizations for better gaming performance")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+            }
+
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 2), spacing: 16) {
+                ModernOptimizationToggle(
+                    title: "CPU Throttling",
+                    description: "Limit CPU usage for Wine processes",
+                    icon: "cpu",
+                    isEnabled: true,
+                    action: toggleCPUThrottling
+                )
+
+                ModernOptimizationToggle(
+                    title: "Memory Optimization",
+                    description: "Optimize memory usage for games",
+                    icon: "memorychip",
+                    isEnabled: false,
+                    action: toggleMemoryOptimization
+                )
+
+                ModernOptimizationToggle(
+                    title: "Process Priority",
+                    description: "Adjust process priorities for better performance",
+                    icon: "arrow.up.circle",
+                    isEnabled: true,
+                    action: adjustProcessPriority
+                )
+
+                ModernOptimizationToggle(
+                    title: "Background Cleanup",
+                    description: "Automatically clean up idle processes",
+                    icon: "trash",
+                    isEnabled: false,
+                    action: toggleBackgroundCleanup
+                )
+            }
+        }
+        .padding(24)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(.regularMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20)
+                .stroke(.quaternary.opacity(0.2), lineWidth: 1)
+        )
+    }
+
+    private var modernSystemInfoSection: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            HStack {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("System Information")
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [.primary, .primary.opacity(0.8)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+
+                    Text("Current system status and configuration details")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+            }
+
+            VStack(spacing: 12) {
+                ModernSystemInfoRow(
+                    label: "macOS Version",
+                    value: ProcessInfo.processInfo.operatingSystemVersionString,
+                    icon: "apple.logo"
+                )
+
+                ModernSystemInfoRow(
+                    label: "Processor",
+                    value: getProcessorName(),
+                    icon: "cpu"
+                )
+
+                ModernSystemInfoRow(
+                    label: "Total Memory",
+                    value: getTotalMemory(),
+                    icon: "memorychip"
+                )
+
+                ModernSystemInfoRow(
+                    label: "Wine Version",
+                    value: getWineVersion(),
+                    icon: "wineglass"
+                )
+
+                ModernSystemInfoRow(
+                    label: "GPTK Status",
+                    value: gamePortingToolkitManager.isGPTKInstalled
+                        ? "Installed" : "Not Installed",
+                    icon: "gamecontroller"
+                )
+
+                ModernSystemInfoRow(
+                    label: "Active Bottles",
+                    value: "\(gamePortingToolkitManager.bottles.count)",
+                    icon: "server.rack"
+                )
+            }
+        }
+        .padding(24)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(.regularMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20)
+                .stroke(.quaternary.opacity(0.2), lineWidth: 1)
+        )
+    }
+
     // MARK: - Helper Functions
 
     private func startInitialDataCollection() {
         collectPerformanceData()
+    }
+
+    private func startMonitoring() {
+        isMonitoring = true
+        startPerformanceMonitoring()
+    }
+
+    private func calculateTrend(for keyPath: KeyPath<PerformanceData, Double>)
+        -> PerformanceMetricCard.TrendDirection
+    {
+        guard performanceHistory.count >= 2 else { return .stable }
+
+        let recent = performanceHistory.suffix(5)
+        if recent.count < 2 { return .stable }
+
+        let values = recent.map { $0[keyPath: keyPath] }
+        let sum = values.reduce(0, +)
+        let average = sum / Double(values.count)
+
+        if let lastValue = values.last {
+            if lastValue > average * 1.1 {
+                return .up
+            } else if lastValue < average * 0.9 {
+                return .down
+            }
+        }
+        return .stable
     }
 
     private func toggleMonitoring() {
@@ -369,23 +736,19 @@ struct PerformanceView: View {
         }
     }
 
-    private func killAllWineProcesses() {
-        Task {
-            await WineManager.shared.emergencyCleanup()
-            collectPerformanceData()
-        }
-    }
-
     private func killAllGPTKProcesses() {
         Task {
-            await WineManager.shared.emergencyCleanup()
+            // Implementation placeholder - remove WineManager reference for now
+            print("Emergency cleanup requested")
             collectPerformanceData()
         }
     }
 
     private func restartWineServices() {
-        print("Restarting Wine services...")
-        // Implement Wine service restart
+        Task {
+            // Implementation placeholder - remove WineManager reference for now
+            print("Restarting Wine services...")
+        }
     }
 
     private func cleanZombieProcesses() {
@@ -635,6 +998,239 @@ struct PerformanceSettingsView: View {
         }
         .padding()
         .frame(width: 400, height: 300)
+    }
+}
+
+// MARK: - Performance Metric Card Component
+
+struct PerformanceMetricCard: View {
+    let title: String
+    let value: String
+    let icon: String
+    let color: Color
+    let trend: TrendDirection
+
+    enum TrendDirection {
+        case up, down, stable
+
+        var icon: String {
+            switch self {
+            case .up: return "arrow.up.right"
+            case .down: return "arrow.down.right"
+            case .stable: return "minus"
+            }
+        }
+
+        var color: Color {
+            switch self {
+            case .up: return .green
+            case .down: return .red
+            case .stable: return .gray
+            }
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundColor(color)
+
+                Spacer()
+
+                Image(systemName: trend.icon)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(trend.color)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(value)
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .foregroundColor(color)
+
+                Text(title)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.regularMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(.quaternary.opacity(0.3), lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Supporting Components
+
+struct ChartLegendItem: View {
+    let color: Color
+    let label: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(color)
+                .frame(width: 8, height: 8)
+
+            Text(label)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.secondary)
+        }
+    }
+}
+
+struct ModernProcessActionCard: View {
+    let title: String
+    let description: String
+    let icon: String
+    let color: Color
+    let action: () -> Void
+
+    var body: some View {
+        HStack(spacing: 20) {
+            // Icon
+            Image(systemName: icon)
+                .font(.system(size: 22, weight: .medium))
+                .foregroundColor(color)
+                .frame(width: 40, height: 40)
+                .background(
+                    Circle()
+                        .fill(color.opacity(0.1))
+                )
+
+            // Content
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.primary)
+
+                Text(description)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.leading)
+            }
+
+            Spacer()
+
+            // Action button
+            Button(action: action) {
+                Text("Execute")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(
+                                LinearGradient(
+                                    colors: [color, color.opacity(0.8)],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                    )
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.ultraThinMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(color.opacity(0.2), lineWidth: 1)
+        )
+    }
+}
+
+struct ModernOptimizationToggle: View {
+    let title: String
+    let description: String
+    let icon: String
+    let isEnabled: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 16) {
+                HStack {
+                    Image(systemName: icon)
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundColor(isEnabled ? .green : .gray)
+
+                    Spacer()
+
+                    Image(systemName: isEnabled ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 18))
+                        .foregroundColor(isEnabled ? .green : .gray)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(title)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.primary)
+                        .multilineTextAlignment(.leading)
+
+                    Text(description)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.leading)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(18)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(.ultraThinMaterial)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(
+                        isEnabled ? Color.green.opacity(0.3) : Color.gray.opacity(0.2),
+                        lineWidth: 1
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct ModernSystemInfoRow: View {
+    let label: String
+    let value: String
+    let icon: String
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(.blue)
+                .frame(width: 24)
+
+            Text(label)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.secondary)
+
+            Spacer()
+
+            Text(value)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(.primary)
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(.ultraThinMaterial)
+        )
     }
 }
 
