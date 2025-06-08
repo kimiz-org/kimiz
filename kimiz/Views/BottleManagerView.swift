@@ -19,6 +19,10 @@ struct BottleManagerView: View {
     @State private var isCreatingBottle = false
     @State private var bottleConfigurations: [String: BottleConfig] = [:]
 
+    // Add placeholder for Configure bottle action
+    @State private var showingConfigureBottleAlert = false
+    @State private var configureBottleName = ""
+
     struct BottleConfig {
         let name: String
         let winVersion: String
@@ -279,6 +283,10 @@ struct BottleManagerView: View {
                     ForEach(Array(bottleConfigurations.values), id: \.name) { config in
                         ModernBottleCard(config: config) {
                             deleteBottle(config.name)
+                        }
+                        .onTapGesture {
+                            configureBottleName = config.name
+                            showingConfigureBottleAlert = true
                         }
                     }
                 }

@@ -17,6 +17,7 @@ struct CompatibilityToolsView: View {
     @State private var isInstalling = false
     @State private var installationProgress: Double = 0.0
     @State private var currentInstallation = ""
+    @State private var showingCleanupAlert = false
 
     struct CompatibilityTool {
         let id = UUID()
@@ -127,6 +128,11 @@ struct CompatibilityToolsView: View {
         .frame(width: 800, height: 700)
         .onAppear {
             loadInstalledTools()
+        }
+        .alert("System Cleanup", isPresented: $showingCleanupAlert) {
+            Button("OK") {}
+        } message: {
+            Text("System cleanup would be performed here.")
         }
     }
 
@@ -452,7 +458,7 @@ struct CompatibilityToolsView: View {
 
     private func performSystemCleanup() {
         // Implement system cleanup
-        print("System cleanup would be performed here")
+        showingCleanupAlert = true
     }
 }
 

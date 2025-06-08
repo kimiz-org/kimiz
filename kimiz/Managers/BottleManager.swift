@@ -66,20 +66,20 @@ internal class BottleManager: ObservableObject {
         do {
             try fileManager.createDirectory(atPath: bottlePath, withIntermediateDirectories: true)
 
-            // Initialize the bottle with proper Wine configuration
-            let winePath = [
-                "/opt/homebrew/bin/wine",
-                "/usr/local/bin/wine",
-                "/opt/homebrew/bin/wine64",
-                "/usr/local/bin/wine64",
+            // Initialize the bottle with GPTK (no Wine fallback)
+            let gptkPath = [
+                "/opt/homebrew/bin/game-porting-toolkit",
+                "/usr/local/bin/game-porting-toolkit",
+                "/opt/homebrew/Cellar/game-porting-toolkit/1.1/bin/game-porting-toolkit",
+                "/usr/local/Cellar/game-porting-toolkit/1.1/bin/game-porting-toolkit",
             ].first(where: { fileManager.fileExists(atPath: $0) })
 
-            if let winePath = winePath {
+            if let gptkPath = gptkPath {
                 print("[GPTK] Initializing bottle \(name) at \(bottlePath)")
 
                 // First initialize the Wine prefix
                 let initProcess = Process()
-                initProcess.executableURL = URL(fileURLWithPath: winePath)
+                initProcess.executableURL = URL(fileURLWithPath: gptkPath)
                 initProcess.arguments = ["wineboot", "--init"]
                 var initEnv = getOptimizedEnvironment(for: Bottle(name: name, path: bottlePath))
                 initEnv["WINEPREFIX"] = bottlePath
@@ -90,7 +90,7 @@ internal class BottleManager: ObservableObject {
 
                 // Then run wineboot to finalize setup
                 let bootProcess = Process()
-                bootProcess.executableURL = URL(fileURLWithPath: winePath)
+                bootProcess.executableURL = URL(fileURLWithPath: gptkPath)
                 bootProcess.arguments = ["wineboot", "-u"]
                 bootProcess.environment = initEnv
                 bootProcess.currentDirectoryURL = URL(fileURLWithPath: bottlePath)
@@ -99,7 +99,9 @@ internal class BottleManager: ObservableObject {
 
                 print("[GPTK] Bottle \(name) initialized successfully")
             } else {
-                print("[GPTK] Warning: Wine not found, bottle created without initialization")
+                print(
+                    "[GPTK] Error: Game Porting Toolkit not found, bottle created without initialization"
+                )
             }
 
             let bottle = Bottle(name: name, path: bottlePath)
@@ -189,20 +191,21 @@ internal class BottleManager: ObservableObject {
         if !fileManager.fileExists(atPath: bottle.path) {
             try fileManager.createDirectory(atPath: bottle.path, withIntermediateDirectories: true)
 
-            // Initialize Wine prefix properly
+            // Initialize Wine prefix properly with GPTK only
             guard
-                let winePath = [
-                    "/opt/homebrew/bin/wine",
-                    "/usr/local/bin/wine",
-                    "/opt/homebrew/bin/wine64",
-                    "/usr/local/bin/wine64",
+                let gptkPath = [
+                    "/opt/homebrew/bin/game-porting-toolkit",
+                    "/usr/local/bin/game-porting-toolkit",
+                    "/opt/homebrew/Cellar/game-porting-toolkit/1.1/bin/game-porting-toolkit",
+                    "/usr/local/Cellar/game-porting-toolkit/1.1/bin/game-porting-toolkit",
                 ].first(where: { fileManager.fileExists(atPath: $0) })
             else {
-                throw BottleError.installationFailed("Wine not found for bottle initialization")
+                throw BottleError.installationFailed(
+                    "Game Porting Toolkit not found for bottle initialization")
             }
 
             let initProcess = Process()
-            initProcess.executableURL = URL(fileURLWithPath: winePath)
+            initProcess.executableURL = URL(fileURLWithPath: gptkPath)
             initProcess.arguments = ["wineboot", "--init"]
             var initEnv = getOptimizedEnvironment(for: bottle)
             initEnv["WINEPREFIX"] = bottle.path

@@ -17,6 +17,9 @@ struct ToolsView: View {
     @State private var showingInstallationWizard = false
     @State private var showingFilePicker = false
     @State private var availableBottles: [String] = []
+    // Add placeholder alerts for Epic Games and Install Tools actions
+    @State private var showingEpicGamesAlert = false
+    @State private var showingInstallToolsAlert = false
 
     var body: some View {
         ZStack {
@@ -186,7 +189,7 @@ struct ToolsView: View {
                     icon: "cloud.fill",
                     accentColor: .orange
                 ) {
-                    // Handle Steam configuration
+                    showingInstallToolsAlert = true
                 }
             }
         }
@@ -411,6 +414,14 @@ struct ToolsView: View {
                 print("Failed to open wine configuration: \(error)")
             }
         }
+    }
+
+    private func openSteamCompatibility() {
+        // Placeholder: Show alert or print statement for now
+        #if DEBUG
+            print("Steam Compatibility configuration not yet implemented.")
+        #endif
+        // You can replace this with a real implementation or a sheet/modal in the future
     }
 }
 

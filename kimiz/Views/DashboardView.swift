@@ -16,6 +16,12 @@ struct DashboardView: View {
     @State private var recentGames: [Game] = []
     @State private var showingAllGames = false
 
+    @State private var showingInstallDialog = false
+    @State private var showingSettings = false
+    @State private var showingWineConfig = false
+    @State private var showingEpicGames = false
+    @State private var showingScanGamesAlert = false
+
     var body: some View {
         ZStack {
             // Modern gradient background
@@ -239,7 +245,7 @@ struct DashboardView: View {
                     icon: "plus.circle.fill",
                     accentColor: .blue
                 ) {
-                    // Show install dialog
+                    showingInstallDialog = true
                 }
 
                 QuickActionCard(
@@ -247,7 +253,7 @@ struct DashboardView: View {
                     icon: "gearshape.fill",
                     accentColor: .gray
                 ) {
-                    // Show settings
+                    showingSettings = true
                 }
 
                 QuickActionCard(
@@ -255,7 +261,7 @@ struct DashboardView: View {
                     icon: "wrench.fill",
                     accentColor: .orange
                 ) {
-                    // Show wine configuration
+                    showingWineConfig = true
                 }
 
                 QuickActionCard(
@@ -263,7 +269,7 @@ struct DashboardView: View {
                     icon: "gamecontroller.fill",
                     accentColor: .purple
                 ) {
-                    // Show Epic Games view
+                    showingEpicGames = true
                 }
 
                 QuickActionCard(
@@ -271,7 +277,7 @@ struct DashboardView: View {
                     icon: "magnifyingglass.circle.fill",
                     accentColor: .cyan
                 ) {
-                    // Scan for games
+                    showingScanGamesAlert = true
                 }
             }
         }

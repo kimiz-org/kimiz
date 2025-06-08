@@ -19,6 +19,10 @@ struct InstallationView: View {
     @State private var installationProgress: Double = 0.0
     @State private var isInstalling = false
 
+    // Add placeholder actions for buttons
+    @State private var showingEpicGamesAlert = false
+    @State private var showingInstallToolsAlert = false
+
     var body: some View {
         ZStack {
             // Modern background
@@ -47,6 +51,16 @@ struct InstallationView: View {
             Button("OK") {}
         } message: {
             Text(alertMessage)
+        }
+        .alert("Epic Games Store", isPresented: $showingEpicGamesAlert) {
+            Button("OK") {}
+        } message: {
+            Text("Epic Games connection is not yet implemented.")
+        }
+        .alert("Install Tools", isPresented: $showingInstallToolsAlert) {
+            Button("OK") {}
+        } message: {
+            Text("Tools installation is not yet implemented.")
         }
     }
 
@@ -187,7 +201,7 @@ struct InstallationView: View {
                     icon: "gamecontroller.fill",
                     accentColor: .purple
                 ) {
-                    // Handle Epic Games connection
+                    showingEpicGamesAlert = true
                 }
 
                 ModernActionCard(
@@ -196,7 +210,7 @@ struct InstallationView: View {
                     icon: "wrench.and.screwdriver",
                     accentColor: .orange
                 ) {
-                    // Handle tools installation
+                    showingInstallToolsAlert = true
                 }
 
                 ModernActionCard(
