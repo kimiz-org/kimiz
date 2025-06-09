@@ -12,6 +12,7 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var gamePortingToolkitManager: GamePortingToolkitManager
     @EnvironmentObject var epicGamesManager: EpicGamesManager
+    @EnvironmentObject var bottleManager: BottleManager
     @State private var selectedTab = 0
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @State private var showOnboarding = false
@@ -177,7 +178,7 @@ struct ContentView: View {
                 Menu {
                     Section("Quick Install") {
                         Button {
-                            selectedTab = 2  // Switch to Tools tab
+                            selectedTab = 1  // Switch to Settings tab
                         } label: {
                             Label("Steam Client", systemImage: "cloud.fill")
                         }
@@ -198,7 +199,7 @@ struct ContentView: View {
                     Divider()
 
                     Button {
-                        selectedTab = 2  // Go to Tools view
+                        selectedTab = 1  // Go to Settings view
                     } label: {
                         Label("View All Options", systemImage: "arrow.right.circle")
                     }
@@ -313,63 +314,35 @@ struct ContentView: View {
 
     private var modernTabView: some View {
         TabView(selection: $selectedTab) {
-            DashboardView()
-                .environmentObject(gamePortingToolkitManager)
-                .environmentObject(epicGamesManager)
-                .tabItem {
-                    VStack(spacing: 4) {
-                        Image(
-                            systemName: selectedTab == 0 ? "house.fill" : "house"
-                        )
-                        .font(.system(size: 16, weight: .medium))
-                        Text("Dashboard")
-                            .font(.system(size: 11, weight: .medium))
-                    }
-                }
-                .tag(0)
-
             LibraryView()
                 .environmentObject(gamePortingToolkitManager)
                 .environmentObject(epicGamesManager)
+                .environmentObject(BottleManager.shared)
                 .tabItem {
                     VStack(spacing: 4) {
                         Image(
-                            systemName: selectedTab == 1 ? "books.vertical.fill" : "books.vertical"
+                            systemName: selectedTab == 0 ? "books.vertical.fill" : "books.vertical"
                         )
                         .font(.system(size: 16, weight: .medium))
                         Text("Library")
                             .font(.system(size: 11, weight: .medium))
                     }
                 }
-                .tag(1)
-
-            ToolsView()
-                .environmentObject(gamePortingToolkitManager)
-                .environmentObject(epicGamesManager)
-                .tabItem {
-                    VStack(spacing: 4) {
-                        Image(
-                            systemName: selectedTab == 2
-                                ? "wrench.and.screwdriver.fill" : "wrench.and.screwdriver"
-                        )
-                        .font(.system(size: 16, weight: .medium))
-                        Text("Tools")
-                            .font(.system(size: 11, weight: .medium))
-                    }
-                }
-                .tag(2)
+                .tag(0)
 
             SettingsView()
                 .environmentObject(gamePortingToolkitManager)
+                .environmentObject(epicGamesManager)
+                .environmentObject(BottleManager.shared)
                 .tabItem {
                     VStack(spacing: 4) {
-                        Image(systemName: selectedTab == 4 ? "gear.circle.fill" : "gear.circle")
+                        Image(systemName: selectedTab == 1 ? "gear.circle.fill" : "gear.circle")
                             .font(.system(size: 16, weight: .medium))
                         Text("Settings")
                             .font(.system(size: 11, weight: .medium))
                     }
                 }
-                .tag(3)
+                .tag(1)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.clear)
@@ -411,4 +384,5 @@ struct ContentView: View {
     ContentView()
         .environmentObject(GamePortingToolkitManager.shared)
         .environmentObject(EpicGamesManager.shared)
+        .environmentObject(BottleManager.shared)
 }

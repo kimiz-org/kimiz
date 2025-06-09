@@ -15,23 +15,27 @@ struct LibraryView: View {
     @StateObject private var libraryManager = LibraryManager.shared
     @State private var isRefreshing = false
     @State private var showingFilePicker = false
-    @State private var selectedGame: Game?
-    @State private var hoveredGame: Game?
+    @State private var selectedApplication: Game?
+    @State private var hoveredApplication: Game?
     @State private var searchText = ""
 
-    // Modern grid layout with larger cards
+    // Modern grid layout with smaller fixed-size cards
     private let columns = [
-        GridItem(.adaptive(minimum: 200, maximum: 280), spacing: 24)
+        GridItem(.fixed(200), spacing: 16),
+        GridItem(.fixed(200), spacing: 16),
+        GridItem(.fixed(200), spacing: 16),
+        GridItem(.fixed(200), spacing: 16),
+        GridItem(.fixed(200), spacing: 16),
     ]
 
-    var filteredGames: [Game] {
-        // Use games from the dedicated LibraryManager
-        let allGames = libraryManager.discoveredGames
+    var filteredApps: [Game] {
+        // Use applications from the dedicated LibraryManager
+        let allApplications = libraryManager.discoveredGames
 
         if searchText.isEmpty {
-            return allGames
+            return allApplications
         } else {
-            return allGames.filter {
+            return allApplications.filter {
                 $0.name.localizedCaseInsensitiveContains(searchText)
             }
         }
@@ -48,12 +52,12 @@ struct LibraryView: View {
                 modernHeaderView
 
                 // Remove any "temporarily disabled" message and always show the library UI
-                if filteredGames.isEmpty && !searchText.isEmpty {
+                if filteredApps.isEmpty && !searchText.isEmpty {
                     searchEmptyStateView
-                } else if filteredGames.isEmpty {
+                } else if filteredApps.isEmpty {
                     modernEmptyStateView
                 } else {
-                    modernGamesGridView
+                    modernAppsGridView
                 }
             }
         }
@@ -69,15 +73,15 @@ struct LibraryView: View {
     }
 
     private var modernHeaderView: some View {
-        ModernSectionView(title: "Game Library", icon: "gamecontroller.fill") {
+        ModernSectionView(title: "Application Library", icon: "square.grid.2x2.fill") {
             VStack(spacing: 16) {
                 // Stats and action buttons
                 HStack {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(spacing: 16) {
                             Label(
-                                "\(libraryManager.discoveredGames.count) games",
-                                systemImage: "gamecontroller.fill"
+                                "\(libraryManager.discoveredGames.count) applications",
+                                systemImage: "square.grid.2x2.fill"
                             )
                             .font(.subheadline)
                             .foregroundColor(.white.opacity(0.7))
@@ -104,7 +108,7 @@ struct LibraryView: View {
                     // Action buttons with modern styling
                     HStack(spacing: 12) {
                         Button {
-                            Task { await refreshGames() }
+                            Task { await refreshApplications() }
                         } label: {
                             Label("Refresh", systemImage: "arrow.clockwise")
                                 .font(.system(size: 14, weight: .medium))
@@ -115,7 +119,7 @@ struct LibraryView: View {
                         Button {
                             showingFilePicker = true
                         } label: {
-                            Label("Add Game", systemImage: "plus")
+                            Label("Add Application", systemImage: "plus")
                                 .font(.system(size: 14, weight: .medium))
                         }
                         .buttonStyle(ModernPrimaryButtonStyle())
@@ -129,7 +133,7 @@ struct LibraryView: View {
                         .foregroundColor(.white.opacity(0.7))
                         .font(.system(size: 16, weight: .medium))
 
-                    TextField("Search games...", text: $searchText)
+                    TextField("Search applications...", text: $searchText)
                         .textFieldStyle(.plain)
                         .font(.system(size: 16))
                         .foregroundColor(.white)
@@ -154,7 +158,8 @@ struct LibraryView: View {
             }
         }
         .padding(.horizontal, 28)
-        .padding(.vertical, 24)
+        .padding(.top, 24)
+        .padding(.bottom, 0)
     }
 
     private var modernEmptyStateView: some View {
@@ -174,7 +179,7 @@ struct LibraryView: View {
                         )
                         .frame(width: 120, height: 120)
 
-                    Image(systemName: "gamecontroller.fill")
+                    Image(systemName: "square.grid.2x2.fill")
                         .font(.system(size: 48, weight: .medium))
                         .foregroundStyle(
                             LinearGradient(
@@ -186,12 +191,12 @@ struct LibraryView: View {
                 }
 
                 VStack(spacing: 12) {
-                    Text("Your Game Library Awaits")
+                    Text("Your Application Library Awaits")
                         .font(.system(size: 28, weight: .bold, design: .rounded))
                         .multilineTextAlignment(.center)
                         .foregroundColor(.white)
 
-                    Text("Add Windows games and run them with Game Porting Toolkit on Mac")
+                    Text("Add Windows applications and run them on your Mac")
                         .font(.system(size: 16, weight: .medium))
                         .foregroundColor(.white.opacity(0.7))
                         .multilineTextAlignment(.center)
@@ -205,7 +210,7 @@ struct LibraryView: View {
                         HStack(spacing: 12) {
                             Image(systemName: "plus.circle.fill")
                                 .font(.system(size: 18, weight: .medium))
-                            Text("Add Your First Game")
+                            Text("Add Your First Application")
                                 .font(.system(size: 16, weight: .semibold))
                         }
                         .frame(maxWidth: 280)
@@ -214,12 +219,12 @@ struct LibraryView: View {
                     .controlSize(.large)
 
                     Button {
-                        Task { await refreshGames() }
+                        Task { await refreshApplications() }
                     } label: {
                         HStack(spacing: 8) {
                             Image(systemName: "arrow.clockwise")
                                 .font(.system(size: 14, weight: .medium))
-                            Text("Scan for Games")
+                            Text("Scan for Applications")
                                 .font(.system(size: 14, weight: .medium))
                         }
                     }
@@ -243,7 +248,7 @@ struct LibraryView: View {
                 .foregroundColor(.white.opacity(0.6))
 
             VStack(spacing: 8) {
-                Text("No games found")
+                Text("No applications found")
                     .font(.title2)
                     .fontWeight(.semibold)
                     .foregroundColor(.white)
@@ -266,57 +271,61 @@ struct LibraryView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var modernGamesGridView: some View {
-        ScrollView {
-            LazyVGrid(columns: columns, spacing: 24) {
-                ForEach(filteredGames) { game in
-                    ModernGameCard(
-                        game: game,
-                        isHovered: hoveredGame?.id == game.id,
-                        onLaunch: { launchGame(game) },
-                        onDelete: { deleteGame(game) },
-                        onHover: { isHovered in
-                            hoveredGame = isHovered ? game : nil
-                        }
-                    )
-                    .contextMenu {
-                        Button("Play", action: { launchGame(game) })
-                        if ![
-                            "Steam", "Epic Games Launcher", "Battle.net", "Origin",
-                            "Ubisoft Connect", "GOG Galaxy",
-                        ].contains(game.name) {
+    private var modernAppsGridView: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            HStack(alignment: .top, spacing: 0) {
+                LazyVGrid(
+                    columns: columns,
+                    alignment: .leading,
+                    spacing: 24
+                ) {
+                    ForEach(filteredApps) { application in
+                        ModernAppCard(
+                            app: application,
+                            isHovered: hoveredApplication?.id == application.id,
+                            onLaunch: { launchApplication(application) },
+                            onDelete: { deleteApplication(application) },
+                            onHover: { isHovered in
+                                hoveredApplication = isHovered ? application : nil
+                            }
+                        )
+                        .contextMenu {
+                            Button("Open", action: { launchApplication(application) })
                             Divider()
                             Button("Remove from Library", role: .destructive) {
-                                deleteGame(game)
+                                deleteApplication(application)
                             }
                         }
                     }
                 }
+                .padding(.leading, 28)
+                .padding(.trailing, 0)
+                .padding(.top, 20)
+                .padding(.bottom, 24)
+                Spacer(minLength: 0)
             }
-            .padding(.horizontal, 32)
-            .padding(.vertical, 24)
         }
         .background(.clear)
         .refreshable {
-            await refreshGames()
+            await refreshApplications()
         }
     }
 
     // MARK: - Actions
 
-    private func refreshGames() async {
+    private func refreshApplications() async {
         isRefreshing = true
         await libraryManager.scanForImportantExecutables()
         isRefreshing = false
     }
 
-    private func launchGame(_ game: Game) {
+    private func launchApplication(_ application: Game) {
         Task {
             do {
-                // Use the GPTK manager to launch the game
-                try await gamePortingToolkitManager.launchGame(game)
+                // Use the GPTK manager to launch the application
+                try await gamePortingToolkitManager.launchGame(application)
             } catch {
-                print("Error launching game: \(error)")
+                print("Error launching application: \(error)")
                 // Could add error alert here
             }
         }
@@ -326,136 +335,91 @@ struct LibraryView: View {
         switch result {
         case .success(let urls):
             if let url = urls.first {
-                installGame(at: url)
+                installApplication(at: url)
             }
         case .failure(let error):
             print("File selection failed: \(error)")
         }
     }
 
-    private func installGame(at url: URL) {
+    private func installApplication(at url: URL) {
         Task {
-            let game = Game(
+            let application = Game(
                 name: url.deletingPathExtension().lastPathComponent,
                 executablePath: url.path,
                 installPath: url.deletingLastPathComponent().path
             )
-            await libraryManager.addUserGame(game)
+            await libraryManager.addUserGame(application)
         }
     }
 
-    private func deleteGame(_ game: Game) {
-        print("[LibraryView] Delete button pressed for game: \(game.name)")
+    private func deleteApplication(_ application: Game) {
+        print("[LibraryView] Delete button pressed for application: \(application.name)")
         Task {
-            // Don't allow deleting Steam or other important launchers
-            guard
-                ![
-                    "Steam", "Epic Games Launcher", "Battle.net", "Origin", "Ubisoft Connect",
-                    "GOG Galaxy",
-                ].contains(game.name)
-            else {
-                print("[LibraryView] Cannot delete important launcher: \(game.name)")
-                return
-            }
-
-            print("[LibraryView] Proceeding to delete game: \(game.name)")
-            await libraryManager.removeUserGame(game)
-            print("[LibraryView] Delete completed for game: \(game.name)")
+            print("[LibraryView] Proceeding to delete application: \(application.name)")
+            await libraryManager.removeUserGame(application)
+            print("[LibraryView] Delete completed for application: \(application.name)")
         }
     }
 }
 
-// MARK: - Game Card Component
+// MARK: - Application Card Component
 
-struct GameCard: View {
-    let game: Game
+struct AppCard: View {
+    let app: Game
     let isHovered: Bool
     let onLaunch: () -> Void
     let onDelete: () -> Void
     let onHover: (Bool) -> Void
 
-    @State private var gameIcon: NSImage?
-
-    private var isImportantLauncher: Bool {
-        ["Steam", "Epic Games Launcher", "Battle.net", "Origin", "Ubisoft Connect", "GOG Galaxy"]
-            .contains(game.name)
-    }
+    @State private var appIcon: NSImage?
 
     var body: some View {
         VStack(spacing: 12) {
-            // Game Icon/Image
+            // Application Icon/Image
             ZStack {
                 RoundedRectangle(cornerRadius: 12)
                     .fill(Color(NSColor.controlBackgroundColor))
                     .frame(width: 150, height: 150)
 
-                if let icon = gameIcon {
+                if let icon = appIcon {
                     Image(nsImage: icon)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .frame(width: 100, height: 100)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                 } else {
-                    Image(systemName: "gamecontroller.fill")
+                    Image(systemName: "app.fill")
                         .font(.system(size: 48))
                         .foregroundColor(.secondary)
                 }
 
-                // Launcher badge for important launchers
-                if isImportantLauncher {
-                    VStack {
-                        HStack {
-                            Spacer()
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [.blue, .purple],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
-                                    .frame(width: 40, height: 16)
-
-                                Text("LAUNCHER")
-                                    .font(.system(size: 7, weight: .bold))
-                                    .foregroundColor(.white)
-                            }
-                            .padding(.top, 8)
-                            .padding(.trailing, 8)
-                        }
-                        Spacer()
-                    }
-                }
-
-                // Play overlay on hover
+                // Hover overlay on hover
                 if isHovered {
                     HStack {
-                        // Delete button (only for user-added games, not important launchers)
-                        if !isImportantLauncher {
-                            ZStack {
-                                Circle()
-                                    .fill(.red.opacity(0.8))
-                                    .frame(width: 40, height: 40)
+                        // Delete button
+                        ZStack {
+                            Circle()
+                                .fill(.red.opacity(0.8))
+                                .frame(width: 40, height: 40)
 
-                                Image(systemName: "trash")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(.white)
-                            }
-                            .onTapGesture {
-                                onDelete()
-                            }
+                            Image(systemName: "trash")
+                                .font(.system(size: 16))
+                                .foregroundColor(.white)
+                        }
+                        .onTapGesture {
+                            onDelete()
                         }
 
                         Spacer()
 
-                        // Play button
+                        // Open button
                         ZStack {
                             Circle()
                                 .fill(.black.opacity(0.7))
                                 .frame(width: 60, height: 60)
 
-                            Image(systemName: "play.fill")
+                            Image(systemName: "arrow.up.forward.app.fill")
                                 .font(.system(size: 24))
                                 .foregroundColor(.white)
                         }
@@ -471,7 +435,7 @@ struct GameCard: View {
                 onHover(hovering)
             }
             .onTapGesture {
-                // Launch game when tapping the card (if not hovering over buttons)
+                // Launch application when tapping the card (if not hovering over buttons)
                 if !isHovered {
                     onLaunch()
                 }
@@ -479,21 +443,21 @@ struct GameCard: View {
             .scaleEffect(isHovered ? 1.05 : 1.0)
             .animation(.easeInOut(duration: 0.2), value: isHovered)
 
-            // Game Info
+            // Application Info
             VStack(spacing: 4) {
-                Text(game.name)
+                Text(app.name)
                     .font(.headline)
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
 
-                if let lastPlayed = game.lastPlayed {
-                    Text("Last played: \(lastPlayed, formatter: relativeDateFormatter)")
+                if let lastUsed = app.lastPlayed {
+                    Text("Last used: \(lastUsed, formatter: relativeDateFormatter)")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 } else {
-                    Text("Never played")
+                    Text("Never used")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -507,16 +471,16 @@ struct GameCard: View {
                 .shadow(color: .black.opacity(0.1), radius: isHovered ? 8 : 4, x: 0, y: 2)
         )
         .onAppear {
-            loadGameIcon()
+            loadApplicationIcon()
         }
     }
 
-    private func loadGameIcon() {
+    private func loadApplicationIcon() {
         // Try to extract icon from executable
         Task {
-            if let icon = extractIconFromExecutable(path: game.executablePath) {
+            if let icon = extractIconFromExecutable(path: app.executablePath) {
                 await MainActor.run {
-                    self.gameIcon = icon
+                    self.appIcon = icon
                 }
             }
         }
@@ -547,20 +511,20 @@ struct GameCard: View {
     }
 }
 
-// MARK: - Modern Game Card Component
+// MARK: - Modern App Card Component
 
-struct ModernGameCard: View {
-    let game: Game
+struct ModernAppCard: View {
+    let app: Game
     let isHovered: Bool
     let onLaunch: () -> Void
     let onDelete: () -> Void
     let onHover: (Bool) -> Void
 
-    @State private var gameIcon: NSImage?
+    @State private var appIcon: NSImage?
 
     var body: some View {
         VStack(spacing: 0) {
-            // Game artwork/icon section
+            // App icon/artwork section
             ZStack {
                 // Modern glassmorphism background with gradient and blur
                 RoundedRectangle(cornerRadius: 28)
@@ -577,23 +541,23 @@ struct ModernGameCard: View {
                     )
                     .background(.ultraThinMaterial)
                     .blur(radius: 0.5)
-                    .frame(height: 220)
+                    .frame(width: 180, height: 160)
                     .shadow(
-                        color: .black.opacity(isHovered ? 0.22 : 0.10), radius: isHovered ? 28 : 12,
-                        x: 0, y: isHovered ? 16 : 6)
+                        color: .black.opacity(isHovered ? 0.22 : 0.10), radius: isHovered ? 18 : 8,
+                        x: 0, y: isHovered ? 10 : 4)
 
-                // Game icon or placeholder
-                if let icon = gameIcon {
+                // App icon or placeholder
+                if let icon = appIcon {
                     Image(nsImage: icon)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                        .frame(width: 140, height: 140)
-                        .clipShape(RoundedRectangle(cornerRadius: 20))
-                        .shadow(color: .black.opacity(0.18), radius: 12, x: 0, y: 6)
+                        .frame(width: 100, height: 100)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .shadow(color: .black.opacity(0.18), radius: 8, x: 0, y: 4)
                 } else {
-                    VStack(spacing: 12) {
-                        Image(systemName: "gamecontroller.fill")
-                            .font(.system(size: 56, weight: .medium))
+                    VStack(spacing: 8) {
+                        Image(systemName: "app.fill")
+                            .font(.system(size: 42, weight: .medium))
                             .foregroundStyle(
                                 LinearGradient(
                                     colors: [.blue.opacity(0.9), .purple.opacity(0.8)],
@@ -602,86 +566,98 @@ struct ModernGameCard: View {
                                 ),
                                 Color.primary  // fallback style
                             )
-                        Text(game.name.prefix(1).uppercased())
-                            .font(.system(size: 28, weight: .bold, design: .rounded))
+                        Text(app.name.prefix(1).uppercased())
+                            .font(.system(size: 22, weight: .bold, design: .rounded))
                             .foregroundColor(.secondary)
                     }
                 }
 
                 // Hover overlay with glass panel and modern actions
                 if isHovered {
-                    VStack {
-                        HStack {
-                            // Delete button (only for non-Steam games)
-                            if game.name != "Steam" {
+                    ZStack {
+                        // Background overlay
+                        RoundedRectangle(cornerRadius: 28)
+                            .fill(.ultraThinMaterial.opacity(0.85))
+                            .frame(width: 180, height: 160)
+                            .shadow(color: .black.opacity(0.10), radius: 8, x: 0, y: 4)
+
+                        // Button overlay
+                        VStack(alignment: .leading) {
+                            // Delete button in top-left
+                            HStack {
                                 Button {
                                     onDelete()
                                 } label: {
                                     Image(systemName: "trash")
-                                        .font(.system(size: 16, weight: .medium))
+                                        .font(.system(size: 14, weight: .medium))
                                         .foregroundColor(.white)
+                                        .padding(6)
+                                        .background(.red.opacity(0.7))
+                                        .clipShape(Circle())
                                 }
-                                .buttonStyle(ModernDestructiveButtonStyle())
-                                .controlSize(.small)
-                                .padding(8)
-                                .background(.ultraThinMaterial.opacity(0.7))
-                                .clipShape(Circle())
-                                .shadow(color: .red.opacity(0.18), radius: 6, x: 0, y: 2)
+                                .buttonStyle(.borderless)
+
+                                Spacer()
                             }
+                            .padding(.top, 12)
+                            .padding(.leading, 12)
+
                             Spacer()
-                        }
-                        Spacer()
-                        // Play button
-                        Button {
-                            onLaunch()
-                        } label: {
-                            HStack(spacing: 10) {
-                                Image(systemName: "play.fill")
-                                    .font(.system(size: 18, weight: .semibold))
-                                Text("Play")
-                                    .font(.system(size: 18, weight: .semibold))
+
+                            // Open button centered at bottom
+                            HStack {
+                                Spacer()
+
+                                Button {
+                                    onLaunch()
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "arrow.up.forward.app.fill")
+                                            .font(.system(size: 12, weight: .semibold))
+                                        Text("Open")
+                                            .font(.system(size: 12, weight: .semibold))
+                                    }
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 6)
+                                    .background(.blue.opacity(0.7))
+                                    .cornerRadius(12)
+                                }
+                                .buttonStyle(.borderless)
+                                .foregroundColor(.white)
+
+                                Spacer()
                             }
-                            .padding(.horizontal, 32)
-                            .padding(.vertical, 12)
+                            .padding(.bottom, 14)
                         }
-                        .buttonStyle(ModernPrimaryButtonStyle())
-                        .controlSize(.large)
-                        .background(.ultraThinMaterial.opacity(0.85))
-                        .clipShape(Capsule())
-                        .shadow(color: .blue.opacity(0.18), radius: 10, x: 0, y: 4)
+                        .frame(width: 180, height: 160)
                     }
-                    .padding(18)
-                    .background(
-                        RoundedRectangle(cornerRadius: 28)
-                            .fill(.ultraThinMaterial.opacity(0.92))
-                            .shadow(color: .black.opacity(0.10), radius: 16, x: 0, y: 8)
-                    )
-                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
                 }
             }
             .clipped()
 
-            // Game info section
-            VStack(spacing: 10) {
-                Text(game.name)
-                    .font(.system(size: 20, weight: .semibold, design: .rounded))
+            // App info section
+            VStack(spacing: 6) {
+                Text(app.name)
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
 
-                if let lastPlayed = game.lastPlayed {
-                    Text("Last played \(lastPlayed, formatter: relativeDateFormatter)")
-                        .font(.system(size: 13, weight: .medium))
+                if let lastUsed = app.lastPlayed {
+                    Text("Last used \(lastUsed, formatter: relativeDateFormatter)")
+                        .font(.system(size: 11, weight: .medium))
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 } else {
-                    Text("Never played")
-                        .font(.system(size: 13, weight: .medium))
+                    Text("Never used")
+                        .font(.system(size: 11, weight: .medium))
                         .foregroundColor(.secondary)
                 }
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 18)
+            .frame(width: 180, height: 70)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
         }
         .background(
             RoundedRectangle(cornerRadius: 32)
@@ -704,8 +680,9 @@ struct ModernGameCard: View {
                     lineWidth: 1.5
                 )
         )
-        .scaleEffect(isHovered ? 1.06 : 1.0)
-        .animation(.spring(response: 0.35, dampingFraction: 0.7), value: isHovered)
+        .frame(width: 200, height: 255)
+        .scaleEffect(isHovered ? 1.02 : 1.0)
+        .animation(.spring(response: 0.25, dampingFraction: 0.8), value: isHovered)
         .onHover { hovering in
             onHover(hovering)
         }
@@ -715,15 +692,15 @@ struct ModernGameCard: View {
             }
         }
         .onAppear {
-            loadGameIcon()
+            loadAppIcon()
         }
     }
 
-    private func loadGameIcon() {
+    private func loadAppIcon() {
         Task {
-            if let icon = extractIconFromExecutable(path: game.executablePath) {
+            if let icon = extractIconFromExecutable(path: app.executablePath) {
                 await MainActor.run {
-                    self.gameIcon = icon
+                    self.appIcon = icon
                 }
             }
         }
@@ -733,7 +710,7 @@ struct ModernGameCard: View {
         let workspace = NSWorkspace.shared
         let icon = workspace.icon(forFile: path)
 
-        // Look for better icons in the game directory
+        // Look for better icons in the application directory
         if icon.representations.count == 1 && icon.size == NSSize(width: 32, height: 32) {
             let directory = (path as NSString).deletingLastPathComponent
             let iconExtensions = ["ico", "png", "jpg", "jpeg", "bmp"]
