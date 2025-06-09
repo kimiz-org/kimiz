@@ -315,7 +315,7 @@ struct InstallationView: View {
     private func installSteam() {
         Task {
             do {
-                try await gamePortingToolkitManager.installSteam()
+                try await self.gamePortingToolkitManager.installSteam()
                 await MainActor.run {
                     alertMessage = "Steam installation started successfully!"
                     showingAlert = true

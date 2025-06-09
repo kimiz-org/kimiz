@@ -176,9 +176,23 @@ struct ContentView: View {
 
                 // Enhanced Quick Install Menu with better visual hierarchy
                 Menu {
+                    Section("Engine Management") {
+                        Button {
+                            selectedTab = 2  // Switch to Engine tab
+                        } label: {
+                            Label("Install GPTK Engine", systemImage: "gear.badge.checkmark")
+                        }
+                        
+                        Button {
+                            selectedTab = 2  // Switch to Engine tab
+                        } label: {
+                            Label("Engine Performance", systemImage: "speedometer")
+                        }
+                    }
+                    
                     Section("Quick Install") {
                         Button {
-                            selectedTab = 1  // Switch to Settings tab
+                            selectedTab = 1  // Switch to Install tab
                         } label: {
                             Label("Steam Client", systemImage: "cloud.fill")
                         }
@@ -199,7 +213,7 @@ struct ContentView: View {
                     Divider()
 
                     Button {
-                        selectedTab = 1  // Go to Settings view
+                        selectedTab = 3  // Go to Settings view
                     } label: {
                         Label("View All Options", systemImage: "arrow.right.circle")
                     }
@@ -342,19 +356,31 @@ struct ContentView: View {
                 }
                 .tag(1)
 
+            EngineView()
+                .environmentObject(EngineManager.shared)
+                .tabItem {
+                    VStack(spacing: 4) {
+                        Image(systemName: selectedTab == 2 ? "gear.badge.checkmark" : "gear.badge")
+                            .font(.system(size: 16, weight: .medium))
+                        Text("Engine")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                }
+                .tag(2)
+
             SettingsView()
                 .environmentObject(gamePortingToolkitManager)
                 .environmentObject(epicGamesManager)
                 .environmentObject(BottleManager.shared)
                 .tabItem {
                     VStack(spacing: 4) {
-                        Image(systemName: selectedTab == 2 ? "gear.circle.fill" : "gear.circle")
+                        Image(systemName: selectedTab == 3 ? "gear.circle.fill" : "gear.circle")
                             .font(.system(size: 16, weight: .medium))
                         Text("Settings")
                             .font(.system(size: 11, weight: .medium))
                     }
                 }
-                .tag(2)
+                .tag(3)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.clear)
@@ -380,13 +406,21 @@ struct ContentView: View {
                 }
                 .tag(1)
 
+            EngineView()
+                .environmentObject(EngineManager.shared)
+                .tabItem {
+                    Image(systemName: "gear.badge")
+                    Text("Engine")
+                }
+                .tag(2)
+
             SettingsView()
                 .environmentObject(gamePortingToolkitManager)
                 .tabItem {
                     Image(systemName: "gear")
                     Text("Settings")
                 }
-                .tag(2)
+                .tag(3)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -397,4 +431,5 @@ struct ContentView: View {
         .environmentObject(GamePortingToolkitManager.shared)
         .environmentObject(EpicGamesManager.shared)
         .environmentObject(BottleManager.shared)
+        .environmentObject(EngineManager.shared)
 }

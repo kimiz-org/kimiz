@@ -18,8 +18,8 @@ struct GamesLibraryView: View {
     @State private var showingEpicConnection = false
 
     var filteredGames: [Game] {
-        // Combine games from both GPTK and Epic Games
-        var allGames = gamePortingToolkitManager.installedGames
+        // For now, return empty array since GamePortingToolkitManager games are handled by EngineManager
+        var allGames: [Game] = []
 
         // Convert Epic Games to regular Game model and add them
         let epicGamesAsGames = epicGamesManager.epicGames.map { epicGame in

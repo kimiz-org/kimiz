@@ -690,7 +690,7 @@ struct SettingsView: View {
                     gamePortingToolkitManager.installationProgress = 1.0
                     gamePortingToolkitManager.installationStatus = "Installation complete"
                 }
-            } catch GamePortingToolkitManager.GPTKError.homebrewRequired {
+            } catch GPTKError.homebrewRequired {
                 await MainActor.run {
                     gamePortingToolkitManager.isInstallingComponents = false
                     gamePortingToolkitManager.installationStatus =

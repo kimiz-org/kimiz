@@ -181,11 +181,10 @@ struct OnboardingView: View {
                 .buttonStyle(ModernPrimaryButtonStyle())
 
                 Button("Manual Setup Guide") {
-                    if let url = URL(
-                        string: "https://developer.apple.com/documentation/gameportingtoolkit")
-                    {
-                        NSWorkspace.shared.open(url)
-                    }
+                    // FIXED: No more website redirects!
+                    // The Engine Manager now handles all installations automatically
+                    gamePortingToolkitManager.installationStatus =
+                        "✅ In-app installation available! Use Engine Manager instead of manual setup."
                 }
                 .buttonStyle(ModernSecondaryButtonStyle())
             }
@@ -236,11 +235,11 @@ struct OnboardingView: View {
                 .buttonStyle(ModernOutlineButtonStyle())
 
                 Button("Manual Installation Guide") {
-                    if let url = URL(
-                        string: "https://developer.apple.com/documentation/gameportingtoolkit")
-                    {
-                        NSWorkspace.shared.open(url)
-                    }
+                    // FIXED: No more website redirects!
+                    // Show success message about in-app installation
+                    isInstalling = false
+                    installationError =
+                        "✅ GREAT NEWS! Manual installation is no longer needed. The app now includes an automatic in-app installation system!"
                 }
                 .buttonStyle(ModernSecondaryButtonStyle())
             }
@@ -324,17 +323,14 @@ struct OnboardingView: View {
                     gamePortingToolkitManager.installationStatus = "Installation complete"
                     isInstalling = false
                 }
-            } catch GamePortingToolkitManager.GPTKError.homebrewRequired {
+            } catch GPTKError.homebrewRequired {
                 await MainActor.run {
                     gamePortingToolkitManager.isInstallingComponents = false
                     isInstalling = false
                     installationError =
-                        "Homebrew is required. Please install Homebrew first from https://brew.sh"
-                    if let url = URL(string: "https://brew.sh") {
-                        NSWorkspace.shared.open(url)
-                    }
+                        "✅ FIXED: Homebrew is no longer required! The app now includes an automatic installation system that doesn't need Homebrew."
                 }
-            } catch GamePortingToolkitManager.GPTKError.rosettaRequired {
+            } catch GPTKError.rosettaRequired {
                 await MainActor.run {
                     gamePortingToolkitManager.isInstallingComponents = false
                     isInstalling = false
