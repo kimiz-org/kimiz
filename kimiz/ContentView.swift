@@ -330,19 +330,31 @@ struct ContentView: View {
                 }
                 .tag(0)
 
+            InstallationView()
+                .environmentObject(gamePortingToolkitManager)
+                .tabItem {
+                    VStack(spacing: 4) {
+                        Image(systemName: selectedTab == 1 ? "plus.circle.fill" : "plus.circle")
+                            .font(.system(size: 16, weight: .medium))
+                        Text("Install")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                }
+                .tag(1)
+
             SettingsView()
                 .environmentObject(gamePortingToolkitManager)
                 .environmentObject(epicGamesManager)
                 .environmentObject(BottleManager.shared)
                 .tabItem {
                     VStack(spacing: 4) {
-                        Image(systemName: selectedTab == 1 ? "gear.circle.fill" : "gear.circle")
+                        Image(systemName: selectedTab == 2 ? "gear.circle.fill" : "gear.circle")
                             .font(.system(size: 16, weight: .medium))
                         Text("Settings")
                             .font(.system(size: 11, weight: .medium))
                     }
                 }
-                .tag(1)
+                .tag(2)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.clear)

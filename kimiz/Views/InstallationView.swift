@@ -34,6 +34,9 @@ struct InstallationView: View {
                     // Modern header
                     modernHeaderView
 
+                    // Rosetta 2 installation section
+                    rosettaInstallSection
+
                     // Installation status section
                     installationStatusSection
 
@@ -73,6 +76,34 @@ struct InstallationView: View {
         }
     }
 
+    private var rosettaInstallSection: some View {
+        VStack(spacing: ModernTheme.Spacing.md) {
+            HStack {
+                Text("Rosetta 2")
+                    .font(ModernTheme.Typography.body)
+                    .foregroundColor(ModernTheme.Colors.textPrimary)
+                Spacer()
+                if !FileManager.default.fileExists(atPath: "/usr/libexec/rosetta") {
+                    Button {
+                        installRosetta2()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "arrow.down.circle.fill")
+                            Text("Install Rosetta 2")
+                                .font(ModernTheme.Typography.caption1)
+                                .fontWeight(.semibold)
+                        }
+                    }
+                    .buttonStyle(ModernPrimaryButtonStyle())
+                } else {
+                    Label("Installed", systemImage: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                        .font(.system(size: 13, weight: .medium))
+                }
+            }
+        }
+    }
+
     private var installationStatusSection: some View {
         ModernInfoPanel(
             title: "Installation Status",
@@ -93,33 +124,32 @@ struct InstallationView: View {
 
                     Spacer()
 
-                    if !gamePortingToolkitManager.isGPTKInstalled {
+                    if gamePortingToolkitManager.showInstallGPTKButton {
                         Button {
                             installGPTK()
                         } label: {
                             HStack(spacing: 8) {
-                                if isInstalling {
-                                    ProgressView()
-                                        .controlSize(.small)
-                                } else {
-                                    Image(systemName: "arrow.down.circle.fill")
-                                }
-                                Text(isInstalling ? "Installing..." : "Install GPTK")
+                                Image(systemName: "arrow.down.circle.fill")
+                                Text("Install Game Porting Toolkit")
                                     .font(ModernTheme.Typography.caption1)
                                     .fontWeight(.semibold)
                             }
                         }
                         .buttonStyle(ModernPrimaryButtonStyle())
-                        .disabled(isInstalling)
                     }
                 }
 
-                if isInstalling {
-                    VStack(spacing: 8) {
-                        Text("Installing GPTK")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.white.opacity(0.8))
-                        ModernProgressView(value: installationProgress)
+                if !gamePortingToolkitManager.isGPTKInstalled {
+                    VStack(spacing: 12) {
+                        Text("Game Porting Toolkit 2 is not installed.")
+                            .font(.headline)
+                            .foregroundColor(.red)
+                        Text(
+                            "Apple now distributes GPTK 2 as a signed, ARM-native .pkg installer. Homebrew is not supported for GPTK 2. Please use the official Apple installer."
+                        )
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
                     }
                 }
             }
@@ -225,31 +255,57 @@ struct InstallationView: View {
         }
     }
 
+    private func installRosetta2() {
+        isInstalling = true
+        Task {
+            let script =
+                "do shell script \"/usr/sbin/softwareupdate --install-rosetta --agree-to-license\" with administrator privileges"
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            process.arguments = ["-e", script]
+            do {
+                try process.run()
+                process.waitUntilExit()
+                if process.terminationStatus == 0 {
+                    await MainActor.run {
+                        isInstalling = false
+                        alertMessage = "Rosetta 2 installed successfully!"
+                        showingAlert = true
+                    }
+                } else {
+                    throw NSError(
+                        domain: "RosettaInstall", code: 1,
+                        userInfo: [
+                            NSLocalizedDescriptionKey:
+                                "Failed to install Rosetta 2. Please install it manually."
+                        ])
+                }
+            } catch {
+                await MainActor.run {
+                    isInstalling = false
+                    alertMessage = "Rosetta 2 installation failed: \(error.localizedDescription)"
+                    showingAlert = true
+                }
+            }
+        }
+    }
+
     private func installGPTK() {
         isInstalling = true
         installationProgress = 0.0
-
         Task {
             do {
-                // Simulate installation progress
-                for i in 1...10 {
-                    await MainActor.run {
-                        installationProgress = Double(i) / 10.0
-                    }
-                    try await Task.sleep(nanoseconds: 300_000_000)  // 0.3 seconds
-                }
-
                 try await gamePortingToolkitManager.installGamePortingToolkit()
                 await MainActor.run {
                     isInstalling = false
-                    alertMessage = "Game Porting Toolkit installed successfully!"
+                    alertMessage =
+                        "Game Porting Toolkit installer launched. Please follow the prompts to complete installation, then restart the app."
                     showingAlert = true
                 }
             } catch {
                 await MainActor.run {
                     isInstalling = false
-                    installationProgress = 0.0
-                    alertMessage = "Installation failed: \(error.localizedDescription)"
+                    alertMessage = "Failed to launch installer: \(error.localizedDescription)"
                     showingAlert = true
                 }
             }

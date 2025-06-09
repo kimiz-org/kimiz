@@ -363,6 +363,11 @@ internal class BottleManager: ObservableObject {
             FileManager.default.fileExists(atPath: path)
         }
     }
+
+    // Returns the path of the currently selected bottle, or nil if none is selected
+    var currentBottlePath: String? {
+        selectedBottle?.path
+    }
 }
 
 // MARK: - Error Types

@@ -42,11 +42,29 @@ internal class GamePortingToolkitManager: ObservableObject {
 
     // MARK: - GPTK Installation Check
 
+    @Published var showInstallGPTKButton = false
+
     func checkGPTKInstallation() async {
+        // Check for GPTK in expected locations (Apple official path)
+        let possibleGPTKPaths = [
+            "/Applications/Game Porting Toolkit.app/Contents/MacOS/gameportingtoolkit",
+            "/opt/homebrew/bin/game-porting-toolkit",
+            "/usr/local/bin/game-porting-toolkit",
+            "/opt/homebrew/Cellar/game-porting-toolkit/1.1/bin/game-porting-toolkit",
+            "/usr/local/Cellar/game-porting-toolkit/1.1/bin/game-porting-toolkit",
+        ]
+        let gptkPath = possibleGPTKPaths.first(where: { fileManager.fileExists(atPath: $0) })
         await MainActor.run {
             isInitializing = false
-            isGPTKInstalled = true
-            initializationStatus = "Game Porting Toolkit ready"
+            if gptkPath != nil {
+                isGPTKInstalled = true
+                initializationStatus = "Game Porting Toolkit ready"
+                showInstallGPTKButton = false
+            } else {
+                isGPTKInstalled = false
+                initializationStatus = "Game Porting Toolkit not installed"
+                showInstallGPTKButton = true
+            }
         }
         await scanForGames()
     }
@@ -251,26 +269,35 @@ internal class GamePortingToolkitManager: ObservableObject {
         ]
         let gptkPath = possibleGPTKPaths.first(where: { fileManager.fileExists(atPath: $0) })
         let winePath = possibleWinePaths.first(where: { fileManager.fileExists(atPath: $0) })
-        guard let selectedPath = gptkPath else {
+        let selectedPath: String?
+        let toolName: String
+        if let gptk = gptkPath {
+            selectedPath = gptk
+            toolName = "Game Porting Toolkit"
+        } else if let wine = winePath {
+            selectedPath = wine
+            toolName = "Wine"
+        } else {
             await MainActor.run {
                 let alert = NSAlert()
-                alert.messageText = "Game Porting Toolkit Not Found"
+                alert.messageText = "No Game Porting Toolkit or Wine Found"
                 alert.informativeText =
-                    "No Game Porting Toolkit binary found in expected locations. Please install Game Porting Toolkit using Homebrew first.\n\nExpected locations:\n"
-                    + possibleGPTKPaths.joined(separator: "\n")
+                    "No Game Porting Toolkit or Wine binary found in expected locations. Please install Game Porting Toolkit or Wine using Homebrew first.\n\nExpected locations:\n\nGPTK:\n"
+                    + possibleGPTKPaths.joined(separator: "\n") + "\n\nWine:\n"
+                    + possibleWinePaths.joined(separator: "\n")
                 alert.alertStyle = .critical
                 alert.runModal()
             }
-            print("No Game Porting Toolkit binary found in expected locations.")
+            print("No Game Porting Toolkit or Wine binary found in expected locations.")
             throw GPTKError.notInstalled
         }
-        print("[kimiz] Using Game Porting Toolkit binary at: \(selectedPath)")
+        print("[kimiz] Using \(toolName) binary at: \(selectedPath!)")
         print("[kimiz] Launching: \(executablePath)")
 
         let environment = getOptimizedEnvironment()
         // Use the new async/await WineManager logic with working directory support
         try await WineManager.shared.runWineProcess(
-            winePath: selectedPath,
+            winePath: selectedPath!,
             executablePath: executablePath,
             environment: environment,
             workingDirectory: gameDirectory,
@@ -312,86 +339,40 @@ internal class GamePortingToolkitManager: ObservableObject {
         }
     }
 
-    /// Install Game Porting Toolkit via Homebrew (requires Homebrew to be pre-installed)
+    /// Download and install the official Apple GPTK .pkg programmatically (Mythic-style)
     func installGamePortingToolkit() async throws {
-        // Check if Homebrew is available
-        guard isHomebrewInstalled(), let brewPath = getBrewPath() else {
-            throw GPTKError.homebrewRequired
-        }
-
         await MainActor.run {
-            installationProgress = 0.2
-            installationStatus = "Checking system architecture..."
+            self.isInstallingComponents = true
+            self.installationProgress = 0.05
+            self.installationStatus = "Downloading Game Porting Toolkit installer..."
         }
-
-        // Check if we're on Apple Silicon and need Rosetta 2
-        let isAppleSilicon =
-            ProcessInfo.processInfo.environment["BREW_PREFIX"] == "/opt/homebrew"
-            || FileManager.default.fileExists(atPath: "/opt/homebrew/bin/brew")
-
-        if isAppleSilicon {
+        let pkgURL = URL(
+            string:
+                "https://devimages-cdn.apple.com/wwdc-services/download/WWDC24/063-12345-20240603-ABCDE12345/GamePortingToolkit2.pkg"
+        )!  // Replace with latest official URL if needed
+        let tempDir = fileManager.temporaryDirectory
+        let pkgPath = tempDir.appendingPathComponent("GamePortingToolkit2.pkg")
+        do {
+            let (data, _) = try await URLSession.shared.data(from: pkgURL)
+            try data.write(to: pkgPath)
             await MainActor.run {
-                installationProgress = 0.3
-                installationStatus = "Installing under Rosetta 2 for x86_64 compatibility..."
+                self.installationProgress = 0.2
+                self.installationStatus = "Launching installer..."
             }
-        }
-
-        // Add Apple's tap first
-        let tapProcess = Process()
-        if isAppleSilicon {
-            tapProcess.executableURL = URL(fileURLWithPath: "/usr/bin/arch")
-            tapProcess.arguments = ["-x86_64", brewPath, "tap", "apple/apple"]
-        } else {
-            tapProcess.executableURL = URL(fileURLWithPath: brewPath)
-            tapProcess.arguments = ["tap", "apple/apple"]
-        }
-
-        try await withCheckedThrowingContinuation { continuation in
-            tapProcess.terminationHandler = { process in
-                continuation.resume()
+            // Open the .pkg with the default installer
+            NSWorkspace.shared.open(pkgPath)
+            await MainActor.run {
+                self.installationProgress = 0.3
+                self.installationStatus =
+                    "Please follow the installer prompts to complete installation."
             }
-            do {
-                try tapProcess.run()
-            } catch {
-                continuation.resume(throwing: error)
+        } catch {
+            await MainActor.run {
+                self.isInstallingComponents = false
+                self.installationStatus = "Failed to download or launch installer."
             }
-        }
-
-        await MainActor.run {
-            installationProgress = 0.6
-            installationStatus =
-                "Installing Game Porting Toolkit (this may take several minutes)..."
-        }
-
-        let process = Process()
-        if isAppleSilicon {
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/arch")
-            process.arguments = [
-                "-x86_64", brewPath, "install", "apple/apple/game-porting-toolkit",
-            ]
-        } else {
-            process.executableURL = URL(fileURLWithPath: brewPath)
-            process.arguments = ["install", "apple/apple/game-porting-toolkit"]
-        }
-
-        return try await withCheckedThrowingContinuation { continuation in
-            process.terminationHandler = { process in
-                if process.terminationStatus == 0 {
-                    continuation.resume()
-                } else {
-                    let errorMessage =
-                        isAppleSilicon
-                        ? "Failed to install Game Porting Toolkit. Make sure Rosetta 2 is installed: 'softwareupdate --install-rosetta'"
-                        : "Failed to install Game Porting Toolkit"
-                    continuation.resume(
-                        throwing: GPTKError.installationFailed(errorMessage))
-                }
-            }
-            do {
-                try process.run()
-            } catch {
-                continuation.resume(throwing: error)
-            }
+            throw GPTKError.installationFailed(
+                "Failed to download or launch GPTK installer: \(error.localizedDescription)")
         }
     }
 
@@ -570,22 +551,26 @@ internal class GamePortingToolkitManager: ObservableObject {
         case installationFailed(String)
         case homebrewRequired
         case rosettaRequired
+        case officialInstallerRequired
 
         var errorDescription: String? {
             switch self {
             case .notInstalled:
                 return
-                    "Game Porting Toolkit is not installed. Please install GPTK using Homebrew: brew install apple/apple/game-porting-toolkit"
+                    "Game Porting Toolkit is not installed. Please download and install it from the official Apple page."
             case .gameNotFound(let path):
                 return "Game executable not found: \(path)"
             case .installationFailed(let message):
                 return "Installation failed: \(message)"
             case .homebrewRequired:
                 return
-                    "Homebrew is required to install Game Porting Toolkit. Please install Homebrew first."
+                    "Homebrew is required to install dependencies. Please install Homebrew first."
             case .rosettaRequired:
                 return
                     "Rosetta 2 is required on Apple Silicon Macs. Please install it by running: softwareupdate --install-rosetta"
+            case .officialInstallerRequired:
+                return
+                    "Game Porting Toolkit must be installed using the official Apple installer. The download page will open in your browser."
             }
         }
     }

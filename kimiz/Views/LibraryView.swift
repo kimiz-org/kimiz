@@ -12,6 +12,7 @@ import SwiftUI
 struct LibraryView: View {
     @EnvironmentObject var gamePortingToolkitManager: GamePortingToolkitManager
     @EnvironmentObject var epicGamesManager: EpicGamesManager
+    @EnvironmentObject var bottleManager: BottleManager
     @StateObject private var libraryManager = LibraryManager.shared
     @State private var isRefreshing = false
     @State private var showingFilePicker = false
@@ -105,6 +106,17 @@ struct LibraryView: View {
 
                     Spacer()
 
+                    // Open in Finder button (user bottle only)
+                    Button {
+                        openUserBottleInFinder()
+                    } label: {
+                        Label("Show User Bottle in Finder", systemImage: "folder")
+                            .font(.system(size: 14, weight: .medium))
+                    }
+                    .buttonStyle(ModernSecondaryButtonStyle())
+                    .help("Open the user bottle in Finder")
+                    .disabled(userBottlePath == nil)
+
                     // Action buttons with modern styling
                     HStack(spacing: 12) {
                         Button {
@@ -160,6 +172,24 @@ struct LibraryView: View {
         .padding(.horizontal, 28)
         .padding(.top, 24)
         .padding(.bottom, 0)
+    }
+
+    // Returns the user bottle path (not CrossOver)
+    private var userBottlePath: String? {
+        // Default user bottle path logic (adjust if needed)
+        let defaultPath = NSString(
+            string: "~/Library/Application Support/kimiz/gptk-bottles/default"
+        ).expandingTildeInPath
+        if FileManager.default.fileExists(atPath: defaultPath) {
+            return defaultPath
+        }
+        return nil
+    }
+
+    private func openUserBottleInFinder() {
+        guard let bottlePath = userBottlePath else { return }
+        let url = URL(fileURLWithPath: bottlePath)
+        NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
     private var modernEmptyStateView: some View {
@@ -361,6 +391,12 @@ struct LibraryView: View {
             print("[LibraryView] Delete completed for application: \(application.name)")
         }
     }
+
+    private func openCurrentBottleInFinder() {
+        guard let bottlePath = bottleManager.currentBottlePath else { return }
+        let url = URL(fileURLWithPath: bottlePath)
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
 }
 
 // MARK: - Application Card Component
@@ -531,20 +567,23 @@ struct ModernAppCard: View {
                     .fill(
                         LinearGradient(
                             colors: [
-                                Color.white.opacity(0.10),
-                                Color.purple.opacity(0.10),
-                                Color.blue.opacity(0.08),
+                                Color.white.opacity(0.13),
+                                Color.purple.opacity(0.13),
+                                Color.blue.opacity(0.10),
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
-                    .background(.ultraThinMaterial)
-                    .blur(radius: 0.5)
+                    .background(
+                        RoundedRectangle(cornerRadius: 28)
+                            .fill(.ultraThinMaterial)
+                    )
+                    .blur(radius: 0.8)
                     .frame(width: 180, height: 160)
                     .shadow(
-                        color: .black.opacity(isHovered ? 0.22 : 0.10), radius: isHovered ? 18 : 8,
-                        x: 0, y: isHovered ? 10 : 4)
+                        color: .black.opacity(isHovered ? 0.18 : 0.08), radius: isHovered ? 16 : 7,
+                        x: 0, y: isHovered ? 8 : 3)
 
                 // App icon or placeholder
                 if let icon = appIcon {
@@ -553,7 +592,7 @@ struct ModernAppCard: View {
                         .aspectRatio(contentMode: .fit)
                         .frame(width: 100, height: 100)
                         .clipShape(RoundedRectangle(cornerRadius: 16))
-                        .shadow(color: .black.opacity(0.18), radius: 8, x: 0, y: 4)
+                        .shadow(color: .black.opacity(0.13), radius: 7, x: 0, y: 3)
                 } else {
                     VStack(spacing: 8) {
                         Image(systemName: "app.fill")
@@ -564,7 +603,7 @@ struct ModernAppCard: View {
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 ),
-                                Color.primary  // fallback style
+                                Color.primary
                             )
                         Text(app.name.prefix(1).uppercased())
                             .font(.system(size: 22, weight: .bold, design: .rounded))
@@ -583,20 +622,21 @@ struct ModernAppCard: View {
 
                         // Button overlay
                         VStack(alignment: .leading) {
-                            // Delete button in top-left
                             HStack {
-                                Button {
-                                    onDelete()
-                                } label: {
+                                Button(action: onDelete) {
                                     Image(systemName: "trash")
-                                        .font(.system(size: 14, weight: .medium))
+                                        .font(.system(size: 20, weight: .medium))
                                         .foregroundColor(.white)
-                                        .padding(6)
-                                        .background(.red.opacity(0.7))
-                                        .clipShape(Circle())
+                                        .padding(12)
+                                        .background(
+                                            Circle()
+                                                .fill(Color.red.opacity(0.88))
+                                                .shadow(
+                                                    color: .red.opacity(0.18), radius: 8, x: 0, y: 2
+                                                )
+                                        )
                                 }
-                                .buttonStyle(.borderless)
-
+                                .buttonStyle(PlainButtonStyle())
                                 Spacer()
                             }
                             .padding(.top, 12)
@@ -604,30 +644,25 @@ struct ModernAppCard: View {
 
                             Spacer()
 
-                            // Open button centered at bottom
                             HStack {
                                 Spacer()
-
-                                Button {
-                                    onLaunch()
-                                } label: {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "arrow.up.forward.app.fill")
-                                            .font(.system(size: 12, weight: .semibold))
-                                        Text("Open")
-                                            .font(.system(size: 12, weight: .semibold))
-                                    }
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 6)
-                                    .background(.blue.opacity(0.7))
-                                    .cornerRadius(12)
+                                Button(action: onLaunch) {
+                                    Image(systemName: "arrow.up.forward.app.fill")
+                                        .font(.system(size: 28, weight: .medium))
+                                        .foregroundColor(.white)
+                                        .padding(18)
+                                        .background(
+                                            Circle()
+                                                .fill(Color.black.opacity(0.75))
+                                                .shadow(
+                                                    color: .black.opacity(0.18), radius: 8, x: 0,
+                                                    y: 2)
+                                        )
                                 }
-                                .buttonStyle(.borderless)
-                                .foregroundColor(.white)
-
+                                .buttonStyle(PlainButtonStyle())
                                 Spacer()
                             }
-                            .padding(.bottom, 14)
+                            .padding(.bottom, 16)
                         }
                         .frame(width: 180, height: 160)
                     }
@@ -646,12 +681,10 @@ struct ModernAppCard: View {
 
                 if let lastUsed = app.lastPlayed {
                     Text("Last used \(lastUsed, formatter: relativeDateFormatter)")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.secondary)
                         .lineLimit(1)
                 } else {
                     Text("Never used")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.caption)
                         .foregroundColor(.secondary)
                 }
             }
@@ -661,24 +694,14 @@ struct ModernAppCard: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 32)
-                .fill(.regularMaterial)
+                .fill(.ultraThinMaterial)
                 .shadow(
-                    color: .black.opacity(isHovered ? 0.18 : 0.08),
-                    radius: isHovered ? 28 : 12,
-                    x: 0,
-                    y: isHovered ? 12 : 4
-                )
+                    color: .black.opacity(isHovered ? 0.13 : 0.07), radius: isHovered ? 14 : 6,
+                    x: 0, y: 2)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 32)
-                .stroke(
-                    LinearGradient(
-                        colors: [Color.blue.opacity(0.18), Color.purple.opacity(0.18)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1.5
-                )
+                .stroke(Color.white.opacity(0.08), lineWidth: 1.2)
         )
         .frame(width: 200, height: 255)
         .scaleEffect(isHovered ? 1.02 : 1.0)
@@ -687,9 +710,7 @@ struct ModernAppCard: View {
             onHover(hovering)
         }
         .onTapGesture {
-            if !isHovered {
-                onLaunch()
-            }
+            if !isHovered { onLaunch() }
         }
         .onAppear {
             loadAppIcon()
@@ -714,7 +735,6 @@ struct ModernAppCard: View {
         if icon.representations.count == 1 && icon.size == NSSize(width: 32, height: 32) {
             let directory = (path as NSString).deletingLastPathComponent
             let iconExtensions = ["ico", "png", "jpg", "jpeg", "bmp"]
-
             for ext in iconExtensions {
                 let iconPath = (directory as NSString).appendingPathComponent("icon.\(ext)")
                 if FileManager.default.fileExists(atPath: iconPath) {
@@ -724,7 +744,6 @@ struct ModernAppCard: View {
                 }
             }
         }
-
         return icon
     }
 }
