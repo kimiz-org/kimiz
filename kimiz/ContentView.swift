@@ -182,14 +182,14 @@ struct ContentView: View {
                         } label: {
                             Label("Install GPTK Engine", systemImage: "gear.badge.checkmark")
                         }
-                        
+
                         Button {
                             selectedTab = 2  // Switch to Engine tab
                         } label: {
                             Label("Engine Performance", systemImage: "speedometer")
                         }
                     }
-                    
+
                     Section("Quick Install") {
                         Button {
                             selectedTab = 1  // Switch to Install tab

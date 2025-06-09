@@ -12,6 +12,7 @@ struct kimizApp: App {
     @StateObject private var gamePortingToolkitManager = GamePortingToolkitManager.shared
     @StateObject private var epicGamesManager = EpicGamesManager.shared
     @StateObject private var bottleManager = BottleManager.shared
+    @StateObject private var engineManager = EngineManager.shared
 
     var body: some Scene {
         WindowGroup {
@@ -19,6 +20,7 @@ struct kimizApp: App {
                 .environmentObject(gamePortingToolkitManager)
                 .environmentObject(epicGamesManager)
                 .environmentObject(bottleManager)
+                .environmentObject(engineManager)
                 .onOpenURL { url in
                     handleURLScheme(url)
                 }

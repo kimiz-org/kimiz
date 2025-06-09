@@ -91,7 +91,7 @@ internal class GamePortingToolkitManager: ObservableObject {
         await MainActor.run {
             self.installationProgress = 0.5
             self.installationStatus =
-                "🎉 SUCCESS! No more website redirects! In-app installation system is ready."
+                "🎉 SUCCESS! No more website redirects! Visit the Engine tab for automatic installation."
         }
 
         // This method now serves as a bridge to the new EngineManager system
@@ -99,7 +99,7 @@ internal class GamePortingToolkitManager: ObservableObject {
         await MainActor.run {
             self.installationProgress = 1.0
             self.installationStatus =
-                "✅ FIXED: Website redirects removed! Use the new Engine Manager for GPTK installation."
+                "✅ FIXED: Website redirects removed! Use the Engine tab for complete GPTK management."
             self.isInstallingComponents = false
         }
     }
