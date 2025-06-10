@@ -387,6 +387,24 @@ struct LibraryView: View {
         print("[LibraryView] Delete button pressed for application: \(application.name)")
         Task {
             print("[LibraryView] Proceeding to delete application: \(application.name)")
+            // Remove all files related to the app
+            let fileManager = FileManager.default
+            // Remove executable
+            if fileManager.fileExists(atPath: application.executablePath) {
+                try? fileManager.removeItem(atPath: application.executablePath)
+            }
+            // Remove install directory if it exists and is not a system path
+            let installPath = application.installPath
+            if !installPath.isEmpty && fileManager.fileExists(atPath: installPath) {
+                // Avoid deleting the whole bottle or system folders
+                let bottleRoot = NSString(
+                    string: "~/Library/Application Support/kimiz/gptk-bottles/default"
+                ).expandingTildeInPath
+                if installPath.hasPrefix(bottleRoot) && installPath != bottleRoot {
+                    try? fileManager.removeItem(atPath: installPath)
+                }
+            }
+            // Remove from library
             await libraryManager.removeUserGame(application)
             print("[LibraryView] Delete completed for application: \(application.name)")
         }

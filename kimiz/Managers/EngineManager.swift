@@ -66,22 +66,34 @@ class EngineManager: ObservableObject {
     }
 
     private func isEngineInstalled() async -> Bool {
-        // Check for our in-app engine installation first
+        // Priority 1: Check for Apple GPTK 2.1 installation
+        let gptk21Paths = [
+            "/usr/local/bin/game-porting-toolkit",
+            "/usr/local/bin/gameportingtoolkit",
+            "/Applications/Game Porting Toolkit.app/Contents/MacOS/gameportingtoolkit",
+        ]
+
+        for path in gptk21Paths {
+            if fileManager.fileExists(atPath: path) {
+                return true
+            }
+        }
+
+        // Priority 2: Check for our in-app engine installation
         let inAppWinePath = "\(wineDirectory)/bin/wine64"
         if fileManager.fileExists(atPath: inAppWinePath) {
             return true
         }
 
-        // Fallback to system GPTK installations
-        let gptkPaths = [
-            "/Applications/Game Porting Toolkit.app/Contents/MacOS/gameportingtoolkit",
-            "/usr/local/bin/wine64",  // Apple installer default
+        // Priority 3: Fallback to system Wine installations
+        let fallbackPaths = [
+            "/usr/local/bin/wine64",
             "/usr/local/bin/wine",
-            "/opt/local/bin/wine64",  // MacPorts fallback
-            "/opt/local/bin/wine",
+            "/opt/homebrew/bin/wine64",
+            "/opt/homebrew/bin/wine",
         ]
 
-        for path in gptkPaths {
+        for path in fallbackPaths {
             if fileManager.fileExists(atPath: path) {
                 return true
             }
@@ -536,7 +548,20 @@ class EngineManager: ObservableObject {
     // MARK: - Engine Management
 
     func getGPTKPath() -> String? {
-        // Priority 1: Our in-app engine installation
+        // Priority 1: Apple Game Porting Toolkit 2.1 installation
+        let gptk21Paths = [
+            "/usr/local/bin/game-porting-toolkit",
+            "/usr/local/bin/gameportingtoolkit",
+            "/Applications/Game Porting Toolkit.app/Contents/MacOS/gameportingtoolkit",
+        ]
+
+        for path in gptk21Paths {
+            if fileManager.fileExists(atPath: path) {
+                return path
+            }
+        }
+
+        // Priority 2: Our in-app engine installation
         let inAppWinePath = "\(wineDirectory)/bin/wine64"
         if fileManager.fileExists(atPath: inAppWinePath) {
             return inAppWinePath
@@ -547,18 +572,16 @@ class EngineManager: ObservableObject {
             return inAppWinePathAlt
         }
 
-        // Priority 2: System installations
-        let paths = [
-            "/opt/homebrew/bin/game-porting-toolkit",
-            "/usr/local/bin/game-porting-toolkit",
-            "/opt/homebrew/bin/wine64",
+        // Priority 3: System Wine installations (fallback)
+        let fallbackPaths = [
             "/usr/local/bin/wine64",
-            "/opt/homebrew/bin/wine",
             "/usr/local/bin/wine",
-            "/Applications/Game Porting Toolkit.app/Contents/MacOS/gameportingtoolkit",
+            "/opt/homebrew/bin/wine64",
+            "/opt/homebrew/bin/wine",
+            "/opt/homebrew/bin/game-porting-toolkit",  // Legacy Homebrew GPTK
         ]
 
-        return paths.first { fileManager.fileExists(atPath: $0) }
+        return fallbackPaths.first { fileManager.fileExists(atPath: $0) }
     }
 
     func getOptimizedEnvironment(bottlePath: String) -> [String: String] {

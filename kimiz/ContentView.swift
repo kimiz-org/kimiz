@@ -47,30 +47,8 @@ struct ContentView: View {
     }
 
     private var modernMainInterface: some View {
-        ZStack {
-            // Modern gradient background
-            LinearGradient(
-                colors: [
-                    Color(red: 0.08, green: 0.08, blue: 0.12),
-                    Color(red: 0.12, green: 0.12, blue: 0.16),
-                    Color(red: 0.16, green: 0.12, blue: 0.20),
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-
-            // Main content with glassmorphism effect
-            VStack(spacing: 0) {
-                // Custom header with app branding
-                modernHeader
-
-                // Tab content with modern styling
-                modernTabView
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        modernTabView
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var modernHeader: some View {

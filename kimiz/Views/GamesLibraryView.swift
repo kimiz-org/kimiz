@@ -141,13 +141,24 @@ struct GamesLibraryView: View {
 
                     // Add game menu
                     Menu {
-                        Section("Install Platform") {
-                            Button {
-                                installSteam()
-                            } label: {
-                                Label("Steam Client", systemImage: "cloud.fill")
+                        Section("Platform") {
+                            if gamePortingToolkitManager.isSteamInstalled() {
+                                Button {
+                                    launchSteam()
+                                } label: {
+                                    Label("Launch Steam", systemImage: "play.circle.fill")
+                                }
+                                .disabled(
+                                    !gamePortingToolkitManager.isGPTKInstalled || isRefreshing)
+                            } else {
+                                Button {
+                                    installSteam()
+                                } label: {
+                                    Label("Install Steam", systemImage: "cloud.fill")
+                                }
+                                .disabled(
+                                    !gamePortingToolkitManager.isGPTKInstalled || isRefreshing)
                             }
-                            .disabled(!gamePortingToolkitManager.isGPTKInstalled || isRefreshing)
 
                             Button {
                                 showingEpicConnection = true
@@ -361,28 +372,54 @@ struct GamesLibraryView: View {
             if gamePortingToolkitManager.isGPTKInstalled {
                 VStack(spacing: 16) {
                     HStack(spacing: 16) {
-                        Button {
-                            installSteam()
-                        } label: {
-                            VStack(spacing: 8) {
-                                Image(systemName: "cloud.fill")
-                                    .font(.system(size: 24, weight: .medium))
-                                Text("Install Steam")
-                                    .font(.system(size: 14, weight: .medium))
-                            }
-                            .foregroundColor(.white)
-                            .frame(width: 140, height: 80)
-                            .background(
-                                LinearGradient(
-                                    colors: [Color.blue, Color.cyan],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
+                        // Steam install/launch button - changes based on installation status
+                        if gamePortingToolkitManager.isSteamInstalled() {
+                            Button {
+                                launchSteam()
+                            } label: {
+                                VStack(spacing: 8) {
+                                    Image(systemName: "play.circle.fill")
+                                        .font(.system(size: 24, weight: .medium))
+                                    Text("Launch Steam")
+                                        .font(.system(size: 14, weight: .medium))
+                                }
+                                .foregroundColor(.white)
+                                .frame(width: 140, height: 80)
+                                .background(
+                                    LinearGradient(
+                                        colors: [Color.green, Color.blue],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
                                 )
-                            )
-                            .cornerRadius(12)
+                                .cornerRadius(12)
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(isRefreshing)
+                        } else {
+                            Button {
+                                installSteam()
+                            } label: {
+                                VStack(spacing: 8) {
+                                    Image(systemName: "cloud.fill")
+                                        .font(.system(size: 24, weight: .medium))
+                                    Text("Install Steam")
+                                        .font(.system(size: 14, weight: .medium))
+                                }
+                                .foregroundColor(.white)
+                                .frame(width: 140, height: 80)
+                                .background(
+                                    LinearGradient(
+                                        colors: [Color.blue, Color.cyan],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .cornerRadius(12)
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(isRefreshing)
                         }
-                        .buttonStyle(.borderless)
-                        .disabled(isRefreshing)
 
                         Button {
                             showingEpicConnection = true
@@ -539,6 +576,18 @@ struct GamesLibraryView: View {
         }
     }
 
+    private func launchSteam() {
+        Task {
+            do {
+                try await SteamManager.shared.launchSteam()
+            } catch {
+                // Handle error launching Steam
+                print("Error launching Steam: \(error)")
+                // You could show an alert to the user here
+            }
+        }
+    }
+
     // MARK: - ModernGPTKStatusSheet Component
     private var modernGPTKStatusSheet: some View {
         VStack(spacing: 0) {
@@ -604,7 +653,7 @@ struct GamesLibraryView: View {
                         valueColor: gamePortingToolkitManager.isGPTKInstalled ? .green : .red
                     )
 
-                    if let version = gamePortingToolkitManager.getGamePortingToolkitVersion() {
+                    if let version = gamePortingToolkitManager.gptkVersion {
                         StatusRow(
                             label: "Version",
                             value: version,

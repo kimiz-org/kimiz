@@ -1,0 +1,289 @@
+//  SteamManager.swift
+//  kimiz
+//
+//  Handles Steam-specific installation, validation, and launch logic using Wine/GPTK
+
+import AppKit
+import Foundation
+import SwiftUI
+import os.log
+
+// Ensure WineManager.swift is visible to this file
+// WineManager is defined as an internal actor in the same target, so use '@_implementationOnly import' if needed
+// But normally, just referencing WineManager.shared should work if the file is in the same target
+
+// Import WineManager for process launching
+@MainActor
+internal class SteamManager: ObservableObject {
+    static let shared = SteamManager()
+
+    private let fileManager = FileManager.default
+    private let defaultBottlePath: String
+
+    @Published var isInstallingSteam = false
+    @Published var installationProgress: Double = 0.0
+    @Published var installationStatus = ""
+
+    private init() {
+        self.defaultBottlePath =
+            NSString(string: "~/Library/Application Support/kimiz/gptk-bottles/default")
+            .expandingTildeInPath
+    }
+
+    /// Check if Steam is installed in the default bottle
+    func isSteamInstalled() -> Bool {
+        let steamPath = defaultBottlePath + "/drive_c/Program Files (x86)/Steam/steam.exe"
+        return fileManager.fileExists(atPath: steamPath)
+    }
+
+    /// Remove broken or partial Steam installations
+    private func cleanupBrokenSteamInstall(at steamDir: String) {
+        let steamExe = (steamDir as NSString).appendingPathComponent("steam.exe")
+        if !fileManager.fileExists(atPath: steamExe) {
+            try? fileManager.removeItem(atPath: steamDir)
+        }
+    }
+
+    /// Download and install Steam using Wine/GPTK
+    func installSteam() async throws {
+        await MainActor.run {
+            self.isInstallingSteam = true
+            self.installationProgress = 0.0
+            self.installationStatus = "Downloading Steam installer..."
+        }
+
+        let steamInstallerURL = "https://steamcdn-a.akamaihd.net/client/installer/SteamSetup.exe"
+        let tmpDir = NSString(string: "~/Library/Application Support/kimiz/tmp")
+            .expandingTildeInPath
+        try? fileManager.createDirectory(
+            atPath: tmpDir, withIntermediateDirectories: true, attributes: nil)
+        let installerPath = (tmpDir as NSString).appendingPathComponent("SteamSetup.exe")
+        try? fileManager.removeItem(atPath: installerPath)
+        guard let url = URL(string: steamInstallerURL) else {
+            await MainActor.run {
+                self.installationStatus = "❌ Invalid Steam installer URL"
+                self.isInstallingSteam = false
+            }
+            throw NSError(
+                domain: "SteamInstallError", code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid Steam installer URL"])
+        }
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            try data.write(to: URL(fileURLWithPath: installerPath))
+            await MainActor.run {
+                self.installationProgress = 0.6
+                self.installationStatus = "Running SteamSetup.exe in bottle..."
+            }
+            let winePath = try findWineOrGPTK()
+            let environment = [
+                "WINEPREFIX": defaultBottlePath,
+                "WINE_LARGE_ADDRESS_AWARE": "1",
+            ]
+            try await WineManager.shared.runWineProcess(
+                winePath: winePath,
+                executablePath: installerPath,
+                arguments: ["/S"],
+                environment: environment,
+                workingDirectory: tmpDir,
+                defaultBottlePath: defaultBottlePath
+            )
+            try? fileManager.removeItem(atPath: installerPath)
+            let steamExePath = defaultBottlePath + "/drive_c/Program Files (x86)/Steam/steam.exe"
+            if fileManager.fileExists(atPath: steamExePath) {
+                await MainActor.run {
+                    self.installationProgress = 1.0
+                    self.installationStatus = "✅ Steam installed successfully!"
+                    self.isInstallingSteam = false
+                }
+            } else {
+                cleanupBrokenSteamInstall(
+                    at: defaultBottlePath + "/drive_c/Program Files (x86)/Steam")
+                await MainActor.run {
+                    self.installationStatus =
+                        "❌ Steam installation did not complete. Please try again or check logs."
+                    self.isInstallingSteam = false
+                }
+                throw NSError(
+                    domain: "SteamInstallError", code: 3,
+                    userInfo: [
+                        NSLocalizedDescriptionKey:
+                            "Steam was not found after installation. Check your Wine/GPTK setup and try again."
+                    ])
+            }
+        } catch {
+            await MainActor.run {
+                self.installationStatus = "❌ Failed to install Steam: \(error.localizedDescription)"
+                self.isInstallingSteam = false
+            }
+            throw error
+        }
+    }
+
+    /// Launch Steam in legacy/small mode for best compatibility
+    func launchSteam() async throws {
+        let steamExePath = defaultBottlePath + "/drive_c/Program Files (x86)/Steam/steam.exe"
+        guard fileManager.fileExists(atPath: steamExePath) else {
+            throw NSError(
+                domain: "SteamLaunchError", code: 1,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Steam is not installed in this bottle. Please install Steam first."
+                ])
+        }
+        let winePath = try findWineOrGPTK()
+        var environment = [
+            "WINEPREFIX": defaultBottlePath,
+            "WINE_LARGE_ADDRESS_AWARE": "1",
+            "STEAM_WEBHELPER_DISABLED": "1",
+            "STEAM_WEBHELPER_RENDERING": "disabled",
+            "STEAM_USE_WEBHELPER": "0",
+            "STEAM_DISABLE_BROWSER_SANDBOX": "1",
+            "STEAM_DISABLE_GPU_ACCELERATION": "1",
+            "STEAM_DISABLE_SHARED_TEXTURE": "1",
+            "STEAM_NO_CEF_SANDBOX": "1",
+            "STEAM_DISABLE_CEF_SANDBOX": "1",
+            "STEAM_DISABLE_OVERLAY": "1",
+            "STEAM_DISABLE_CHROME": "1",
+            "STEAM_DISABLE_WEBVIEW": "1",
+            "DISPLAY": ":0.0",
+            "WINE_DISABLE_LAYER_COMPOSITOR": "1",
+            "WINEDLLOVERRIDES": "winemenubuilder.exe=d",
+        ]
+        // Add Wine-specific tweaks if using Wine
+        if winePath.contains("wine") {
+            environment["WINEDEBUG"] = "-all"
+            environment["WINE_CPU_TOPOLOGY"] = "4:2"
+        }
+        // Launch Steam in small mode/legacy UI
+        let steamArguments = [
+            "-no-cef-sandbox",
+            "-noreactlogin",
+            "-no-browser",
+            "-vgui",
+            "+open", "steam://open/minigameslist",
+        ]
+        // Optionally: Rename steamwebhelper.exe to prevent it from running at all
+        let steamWebHelperPath =
+            (steamExePath as NSString).deletingLastPathComponent + "/steamwebhelper.exe"
+        if fileManager.fileExists(atPath: steamWebHelperPath) {
+            let disabledPath = steamWebHelperPath + ".disabled"
+            try? fileManager.removeItem(atPath: disabledPath)
+            try? fileManager.moveItem(atPath: steamWebHelperPath, toPath: disabledPath)
+        }
+        do {
+            try await WineManager.shared.runWineProcess(
+                winePath: winePath,
+                executablePath: steamExePath,
+                arguments: steamArguments,
+                environment: environment,
+                workingDirectory: (steamExePath as NSString).deletingLastPathComponent,
+                defaultBottlePath: defaultBottlePath
+            )
+        } catch {
+            throw NSError(
+                domain: "SteamLaunchError", code: 3,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Failed to launch Steam: \(error.localizedDescription)"
+                ])
+        }
+    }
+
+    /// Find Wine or GPTK binary, prefer GPTK
+    private func findWineOrGPTK() throws -> String {
+        let possibleGPTKPaths = [
+            "/opt/homebrew/bin/game-porting-toolkit",
+            "/usr/local/bin/game-porting-toolkit",
+            "/opt/homebrew/Cellar/game-porting-toolkit/1.1/bin/game-porting-toolkit",
+            "/usr/local/Cellar/game-porting-toolkit/1.1/bin/game-porting-toolkit",
+        ]
+        let possibleWinePaths = [
+            "/opt/homebrew/bin/wine",
+            "/usr/local/bin/wine",
+            "/opt/homebrew/bin/wine64",
+            "/usr/local/bin/wine64",
+        ]
+        if let gptk = possibleGPTKPaths.first(where: { fileManager.fileExists(atPath: $0) }) {
+            return gptk
+        }
+        if let wine = possibleWinePaths.first(where: { fileManager.fileExists(atPath: $0) }) {
+            return wine
+        }
+        throw NSError(
+            domain: "SteamSystem", code: 404,
+            userInfo: [
+                NSLocalizedDescriptionKey:
+                    "Neither Game Porting Toolkit nor Wine found. Please install Wine via Homebrew or install GPTK."
+            ])
+    }
+
+    // Steam game model for library integration
+    struct SteamGame: Identifiable, Codable {
+        let id: UUID
+        let appId: String
+        let name: String
+        let installPath: String?
+        let executablePath: String?
+        var isInstalled: Bool
+        var lastPlayed: Date?
+        // Add more fields as needed
+        init(
+            id: UUID = UUID(), appId: String, name: String, installPath: String? = nil,
+            executablePath: String? = nil, isInstalled: Bool = false, lastPlayed: Date? = nil
+        ) {
+            self.id = id
+            self.appId = appId
+            self.name = name
+            self.installPath = installPath
+            self.executablePath = executablePath
+            self.isInstalled = isInstalled
+            self.lastPlayed = lastPlayed
+        }
+    }
+
+    /// Launch a Steam game using Wine/GPTK
+    func launchGame(_ game: SteamGame) async throws {
+        guard let exe = game.executablePath, FileManager.default.fileExists(atPath: exe) else {
+            throw NSError(
+                domain: "SteamGameLaunch", code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Steam game executable not found."])
+        }
+        let possibleGPTKPaths = [
+            "/opt/homebrew/bin/game-porting-toolkit",
+            "/usr/local/bin/game-porting-toolkit",
+            "/opt/homebrew/Cellar/game-porting-toolkit/1.1/bin/game-porting-toolkit",
+            "/usr/local/Cellar/game-porting-toolkit/1.1/bin/game-porting-toolkit",
+        ]
+        let possibleWinePaths = [
+            "/opt/homebrew/bin/wine",
+            "/usr/local/bin/wine",
+            "/opt/homebrew/bin/wine64",
+            "/usr/local/bin/wine64",
+        ]
+        var winePath: String?
+        winePath = possibleGPTKPaths.first(where: { fileManager.fileExists(atPath: $0) })
+        if winePath == nil {
+            winePath = possibleWinePaths.first(where: { fileManager.fileExists(atPath: $0) })
+        }
+        guard let finalWinePath = winePath else {
+            throw NSError(
+                domain: "SteamGameLaunch", code: 2,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Neither Game Porting Toolkit nor Wine found."
+                ])
+        }
+        let gameDir = (exe as NSString).deletingLastPathComponent
+        let environment = [
+            "WINEPREFIX": defaultBottlePath,
+            "WINE_LARGE_ADDRESS_AWARE": "1",
+        ]
+        try await WineManager.shared.runWineProcess(
+            winePath: finalWinePath,
+            executablePath: exe,
+            environment: environment,
+            workingDirectory: gameDir,
+            defaultBottlePath: defaultBottlePath
+        )
+    }
+}

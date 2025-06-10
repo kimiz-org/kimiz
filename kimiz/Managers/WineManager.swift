@@ -5,7 +5,9 @@
 //  Created by temidaradev on 6.06.2025.
 //
 
+import AppKit
 import Foundation
+import SwiftUI
 import os.log
 
 // Game Porting Toolkit-specific error types
@@ -33,247 +35,27 @@ enum WineError: LocalizedError {
     }
 }
 
-actor WineManager {
+// MARK: - WineManager: Modern, Robust, and Modular
+
+internal actor WineManager {
     static let shared = WineManager()
     private let fileManager = FileManager.default
     private let defaultBottlePath: String = NSString(
         string: "~/Library/Application Support/kimiz/gptk-bottles/default"
     ).expandingTildeInPath
 
-    // Performance monitoring
-    private let logger = Logger(subsystem: "dev.kimiz.gptkmanager", category: "performance")
+    // Process and resource management
     private var activeProcesses: Set<Int32> = []
-    private let processQueue = DispatchQueue(label: "gptk.process.management", qos: .userInitiated)
-
-    // Process timeout and resource limits
-    private let processTimeout: TimeInterval = 300.0  // 5 minutes max
+    private let processQueue = DispatchQueue(label: "kimiz.wine.process.queue", qos: .userInitiated)
     private let maxConcurrentProcesses = 3
-    private let cpuThrottleThreshold: Double = 80.0  // CPU percentage
+    private let cpuThrottleThreshold: Double = 80.0
+    private let processTimeout: TimeInterval = 1800.0
+    private let gameTimeout: TimeInterval = 3600.0
+    private let installerTimeout: TimeInterval = 7200.0
 
-    // Cache compiled regexes for performance - moved to class level
-    private static let cachedPatterns: [(NSRegularExpression, String)] = {
-        let errorPatterns = [
-            // DirectX error patterns - look for actual errors, not just mentions
-            ("failed to create d3d11", "directx11"),
-            ("d3d11 device creation failed", "directx11"),
-            ("dxgi error", "directx11"),
-            ("directx.*not found", "directx11"),
-            ("directx.*missing", "directx11"),
-            ("d3d12.*failed", "directx12"),
+    // MARK: - Public API
 
-            // Visual C++ Runtime error patterns
-            ("vcruntime140.*not found", "vcrun2015"),
-            ("msvcp140.*missing", "vcrun2015"),
-            ("api-ms-win.*not found", "vcrun2015"),
-            ("runtime library.*missing", "vcrun2015"),
-
-            // D3D Compiler error patterns
-            ("d3dcompiler.*not found", "d3dcompiler_47"),
-            ("d3dcompiler.*missing", "d3dcompiler_47"),
-            ("shader compilation failed", "d3dcompiler_47"),
-
-            // .NET Framework error patterns
-            ("dotnet.*not installed", "dotnet48"),
-            (".net framework.*missing", "dotnet48"),
-            ("mscorlib.*not found", "dotnet48"),
-
-            // Vulkan error patterns - only real errors, not info messages
-            ("vulkan.*not found", "vulkan"),
-            ("vulkan.*missing", "vulkan"),
-            ("vulkan.*failed", "vulkan"),
-            ("vk_.*error", "vulkan"),
-            ("vulkan driver.*not", "vulkan"),
-
-            // DXVK error patterns
-            ("dxvk.*error", "dxvk"),
-            ("dxvk.*failed", "dxvk"),
-
-            // General DLL missing patterns
-            (".*\\.dll.*not found", "vcrun2015"),
-            (".*\\.dll.*missing", "vcrun2015"),
-        ]
-
-        return errorPatterns.compactMap { pattern, component in
-            do {
-                let regex = try NSRegularExpression(pattern: pattern, options: .caseInsensitive)
-                return (regex, component)
-            } catch {
-                return nil
-            }
-        }
-    }()
-
-    // Helper to detect missing component from Wine output
-    func detectMissingComponent(from output: String) -> String? {
-        let lowercaseOutput = output.lowercased()
-
-        // Skip MoltenVK informational messages - these are not errors
-        if lowercaseOutput.contains("[mvk-info]") || lowercaseOutput.contains("created vkinstance")
-            || lowercaseOutput.contains("moltenvk")
-        {
-            return nil
-        }
-
-        // Skip successful Vulkan initialization messages
-        if lowercaseOutput.contains("vulkan version") && lowercaseOutput.contains("enabled") {
-            return nil
-        }
-
-        // Use the static cached patterns
-        for (regex, component) in Self.cachedPatterns {
-            let range = NSRange(location: 0, length: lowercaseOutput.count)
-            if regex.firstMatch(in: lowercaseOutput, options: [], range: range) != nil {
-                return component
-            }
-        }
-        return nil
-    }
-
-    // Check system resources before launching process
-    private func checkSystemResources() async throws {
-        // Check if we're exceeding concurrent process limit
-        if activeProcesses.count >= maxConcurrentProcesses {
-            logger.warning(
-                "Maximum concurrent Wine processes reached (\(self.maxConcurrentProcesses))")
-            throw WineError.resourceLimitExceeded
-        }
-
-        // Check CPU usage
-        let cpuUsage = await getCurrentCPUUsage()
-        if cpuUsage > cpuThrottleThreshold {
-            logger.warning("High CPU usage detected (\(cpuUsage)%), throttling Wine process")
-            throw WineError.highCPUUsage(cpuUsage)
-        }
-    }
-
-    // Monitor CPU usage
-    private func getCurrentCPUUsage() async -> Double {
-        return await withCheckedContinuation { continuation in
-            let task = Process()
-            task.launchPath = "/usr/bin/top"
-            task.arguments = ["-l", "1", "-n", "0"]
-
-            let pipe = Pipe()
-            task.standardOutput = pipe
-
-            do {
-                try task.run()
-                task.waitUntilExit()
-
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                if let output = String(data: data, encoding: .utf8) {
-                    // Parse CPU usage from top output
-                    let lines = output.components(separatedBy: .newlines)
-                    for line in lines {
-                        if line.contains("CPU usage:") {
-                            // Extract CPU percentage from line like "CPU usage: 12.34% user, 5.67% sys, 81.99% idle"
-                            let components = line.components(separatedBy: ",")
-                            if let userComponent = components.first(where: { $0.contains("user") })
-                            {
-                                let numbers = userComponent.components(separatedBy: .whitespaces)
-                                    .compactMap {
-                                        Double($0.replacingOccurrences(of: "%", with: ""))
-                                    }
-                                if let userCPU = numbers.first {
-                                    continuation.resume(returning: userCPU)
-                                    return
-                                }
-                            }
-                        }
-                    }
-                }
-                continuation.resume(returning: 0.0)
-            } catch {
-                continuation.resume(returning: 0.0)
-            }
-        }
-    }
-
-    // Helper method to safely remove process from active set
-    private func removeActiveProcess(_ pid: Int32) {
-        activeProcesses.remove(pid)
-        logger.info("Wine process PID \(pid) completed")
-    }
-
-    // Cleanup stale Wine processes
-    private func cleanupStaleProcesses() async {
-        await withCheckedContinuation { continuation in
-            processQueue.async {
-                let task = Process()
-                task.launchPath = "/usr/bin/pgrep"
-                task.arguments = ["-f", "wine"]
-
-                let pipe = Pipe()
-                task.standardOutput = pipe
-
-                do {
-                    try task.run()
-                    task.waitUntilExit()
-
-                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                    if let output = String(data: data, encoding: .utf8), !output.isEmpty {
-                        let pids = output.trimmingCharacters(in: .whitespacesAndNewlines)
-                            .components(separatedBy: .newlines)
-                            .compactMap { Int32($0) }
-
-                        // Check each process and kill if it's consuming too much CPU
-                        for pid in pids {
-                            Task {
-                                await self.checkAndKillHighCPUProcess(pid: pid)
-                            }
-                        }
-                    }
-                } catch {
-                    // Silent fail - cleanup is best effort
-                }
-                continuation.resume()
-            }
-        }
-    }
-
-    // Kill process if it's using too much CPU
-    private func checkAndKillHighCPUProcess(pid: Int32) async {
-        await withCheckedContinuation { continuation in
-            let task = Process()
-            task.launchPath = "/bin/ps"
-            task.arguments = ["-p", "\(pid)", "-o", "pid,pcpu"]
-
-            let pipe = Pipe()
-            task.standardOutput = pipe
-
-            do {
-                try task.run()
-                task.waitUntilExit()
-
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                if let output = String(data: data, encoding: .utf8) {
-                    let lines = output.components(separatedBy: .newlines)
-                    if lines.count > 1,
-                        let dataLine = lines.last?.trimmingCharacters(in: .whitespaces)
-                    {
-                        let components = dataLine.components(separatedBy: .whitespaces)
-                        if components.count >= 2, let cpuUsage = Double(components[1]),
-                            cpuUsage > 50.0
-                        {
-                            self.logger.warning(
-                                "Killing high CPU Wine process PID \(pid) with \(cpuUsage)% CPU usage"
-                            )
-                            kill(pid, SIGTERM)
-                            // If SIGTERM doesn't work, force kill after 2 seconds
-                            DispatchQueue.global().asyncAfter(deadline: .now() + 2.0) {
-                                kill(pid, SIGKILL)
-                            }
-                        }
-                    }
-                }
-            } catch {
-                // Silent fail
-            }
-            continuation.resume()
-        }
-    }
-
-    // Async real-time output reading for Wine process
+    /// Run a Windows process using Wine or GPTK with robust resource and timeout management
     func runWineProcess(
         winePath: String,
         executablePath: String,
@@ -282,56 +64,22 @@ actor WineManager {
         workingDirectory: String? = nil,
         defaultBottlePath: String
     ) async throws {
-        // Check system resources before starting
         try await checkSystemResources()
-
-        // Clean up any stale processes first
         await cleanupStaleProcesses()
-
-        // Single execution - no automatic retries to prevent infinite loops
-        // If components are missing, user will be notified but game won't auto-retry
+        let timeout = determineTimeout(for: executablePath)
         let process = Process()
         process.executableURL = URL(fileURLWithPath: winePath)
         process.arguments = [executablePath] + arguments
-
-        // Use the game's directory as working directory if provided, otherwise use default bottle path
-        let currentWorkingDirectory = workingDirectory ?? defaultBottlePath
-        process.currentDirectoryURL = URL(fileURLWithPath: currentWorkingDirectory)
-
-        // Set up user-writable directories for Wine (like CrossOver)
-        let appSupportDir = (NSHomeDirectory() as NSString).appendingPathComponent(
-            "Library/Application Support/kimiz")
-        let winePrefix = (appSupportDir as NSString).appendingPathComponent(
-            "gptk-bottles/default")
-        let tmpDir = (appSupportDir as NSString).appendingPathComponent("tmp")
-        if !fileManager.fileExists(atPath: winePrefix) {
-            try? fileManager.createDirectory(
-                atPath: winePrefix, withIntermediateDirectories: true, attributes: nil)
-        }
-        if !fileManager.fileExists(atPath: tmpDir) {
-            try? fileManager.createDirectory(
-                atPath: tmpDir, withIntermediateDirectories: true, attributes: nil)
-        }
-        var wineEnv = environment
-        wineEnv["WINEPREFIX"] = winePrefix
-        wineEnv["TMPDIR"] = tmpDir
-        process.environment = wineEnv
-        print("[WineManager] Environment for Wine: \(wineEnv)")
-        print("[WineManager] Executing: \(winePath) \(executablePath)")
-        print("[WineManager] Working directory: \(defaultBottlePath)")
-
+        process.currentDirectoryURL = URL(fileURLWithPath: workingDirectory ?? defaultBottlePath)
+        process.environment = prepareEnvironment(base: environment)
         let pipe = Pipe()
-        process.standardError = pipe
         process.standardOutput = pipe
-
+        process.standardError = pipe
         let fileHandle = pipe.fileHandleForReading
-
-        // Use a serial queue to synchronize continuation resume
-        let resumeQueue = DispatchQueue(label: "runWineProcess.resumeQueue")
         var hasResumed = false
-
+        let resumeQueue = DispatchQueue(label: "kimiz.wine.resume.queue")
         try await withCheckedThrowingContinuation { continuation in
-            @Sendable func safeResume(_ block: @escaping @Sendable () -> Void) {
+            func safeResume(_ block: @escaping () -> Void) {
                 resumeQueue.sync {
                     guard !hasResumed else { return }
                     hasResumed = true
@@ -351,22 +99,9 @@ actor WineManager {
             }
             do {
                 try process.run()
-                // Track active process
                 let pid = process.processIdentifier
                 activeProcesses.insert(pid)
-                logger.info("Started Wine process PID \(pid)")
-
-                // Set up process timeout
-                Task { [weak self] in
-                    guard let self = self else { return }
-                    try await Task.sleep(nanoseconds: UInt64(self.processTimeout * 1_000_000_000))
-                    if process.isRunning {
-                        self.logger.warning(
-                            "Wine process PID \(pid) timed out after \(self.processTimeout) seconds, terminating"
-                        )
-                        process.terminate()
-                    }
-                }
+                monitorProcessWithTimeout(process: process, timeout: timeout)
             } catch {
                 fileHandle.readabilityHandler = nil
                 safeResume { continuation.resume(throwing: error) }
@@ -375,540 +110,158 @@ actor WineManager {
             DispatchQueue.global().async {
                 process.waitUntilExit()
                 fileHandle.readabilityHandler = nil
-
-                // Remove from active processes safely using Task
                 let pid = process.processIdentifier
-                Task {
-                    await self.removeActiveProcess(pid)
-                }
-
-                // Log the process exit status for debugging
-                let exitCode = process.terminationStatus
-                print("[WineManager] Process exited with code: \(exitCode)")
-
-                if exitCode != 0 {
-                    print(
-                        "[WineManager] Non-zero exit code indicates the game may have failed to start or crashed"
-                    )
-                    print(
-                        "[WineManager] Common causes: missing dependencies, corrupted executable, or incompatible game"
-                    )
-                }
-
+                Task { await self.removeActiveProcess(pid) }
                 safeResume { continuation.resume() }
             }
         }
-
-        // Log completion
-        let exitCode = process.terminationStatus
-        if exitCode != 0 {
-            print("[WineManager] Game failed with exit code \(exitCode)")
-            print(
-                "[WineManager] This likely indicates a Wine configuration or game compatibility issue"
-            )
-        } else {
-            print("[WineManager] Game completed successfully")
-        }
     }
 
-    // MARK: - Performance Optimization Methods
+    // MARK: - Resource & Process Management
 
-    /// Start real-time performance monitoring to prevent CPU overload
-    func startPerformanceMonitoring() async {
-        logger.info("Starting performance monitoring for Wine processes")
-
-        // Start continuous monitoring task
-        Task {
-            while true {
-                await monitorAndOptimizeProcesses()
-                try await Task.sleep(nanoseconds: 5_000_000_000)  // Check every 5 seconds
-            }
+    private func checkSystemResources() async throws {
+        if activeProcesses.count >= maxConcurrentProcesses {
+            throw WineError.resourceLimitExceeded
         }
-    }
-
-    /// Monitor and optimize running Wine processes
-    private func monitorAndOptimizeProcesses() async {
-        // Get all Wine-related processes
-        let wineProcesses = await getWineProcesses()
-        var totalCPU = 0.0
-        for proc in wineProcesses {
-            totalCPU += await getProcessCPUUsage(pid: proc.pid)
-        }
-
-        // If total CPU is extremely high, enforce global round-robin throttling
-        if totalCPU > 80.0 && wineProcesses.count > 1 {
-            logger.warning(
-                "[Global Throttle] Enforcing round-robin suspension for all Wine/GPTK processes (total CPU: \(totalCPU)%)"
-            )
-            await globalRoundRobinThrottle(processes: wineProcesses)
-            return
-        }
-
-        for process in wineProcesses {
-            let cpuUsage = await getProcessCPUUsage(pid: process.pid)
-
-            // Terminate processes consuming excessive CPU
-            if cpuUsage > 95.0 {
-                logger.warning(
-                    "Terminating runaway Wine/GPTK process PID \(process.pid) with \(cpuUsage)% CPU usage"
-                )
-                await terminateProcess(pid: process.pid, processName: process.name)
-            }
-            // Aggressively throttle processes with high CPU usage (now > 40%)
-            else if cpuUsage > 40.0 {
-                logger.info(
-                    "Aggressively throttling Wine/GPTK process PID \(process.pid) with \(cpuUsage)% CPU usage"
-                )
-                await limitProcessCPU(pid: process.pid, maxCPU: 30.0)
-                await applyCPULimitIfAvailable(pid: process.pid, maxCPU: 30)
-                await throttleProcess(pid: process.pid)
-            }
-        }
-
-        // --- PERFORMANCE: Aggressive Steam/Service Throttling ---
-        await aggressivelyThrottleBackgroundProcesses()
-
-        // Steam-specific optimizations
-        await optimizeSteamProcesses()
-    }
-
-    /// Globally throttle all Wine/GPTK processes in a round-robin fashion
-    private func globalRoundRobinThrottle(processes: [(pid: Int32, name: String)]) async {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            processQueue.async {
-                // Suspend all processes first
-                for proc in processes {
-                    kill(proc.pid, SIGSTOP)
-                }
-                self.logger.info("[Global Throttle] Suspended all Wine/GPTK processes")
-                // Resume each process one at a time for a short period
-                func resumeNext(index: Int) {
-                    if index >= processes.count {
-                        // After one round, resume all and finish
-                        for proc in processes {
-                            kill(proc.pid, SIGCONT)
-                        }
-                        self.logger.info(
-                            "[Global Throttle] Completed round-robin, resumed all processes")
-                        continuation.resume()
-                        return
-                    }
-                    let proc = processes[index]
-                    kill(proc.pid, SIGCONT)
-                    self.logger.info("[Global Throttle] Resumed PID \(proc.pid) for 0.05s")
-                    DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) {
-                        kill(proc.pid, SIGSTOP)
-                        self.logger.info("[Global Throttle] Re-suspended PID \(proc.pid)")
-                        resumeNext(index: index + 1)
-                    }
-                }
-                // Start round-robin
-                DispatchQueue.global().asyncAfter(deadline: .now() + 0.8) {
-                    resumeNext(index: 0)
-                }
-            }
-        }
-    }
-
-    /// Try to apply cpulimit if available
-    private func applyCPULimitIfAvailable(pid: Int32, maxCPU: Int) async {
-        await withCheckedContinuation { continuation in
-            processQueue.async {
-                let fileManager = FileManager.default
-                if fileManager.isExecutableFile(atPath: "/usr/local/bin/cpulimit") {
-                    let task = Process()
-                    task.launchPath = "/usr/local/bin/cpulimit"
-                    task.arguments = ["-p", "\(pid)", "-l", "\(maxCPU)", "-b"]
-                    do {
-                        try task.run()
-                        self.logger.info("Applied cpulimit to process PID \(pid)")
-                    } catch {
-                        self.logger.error(
-                            "Failed to apply cpulimit to process PID \(pid): \(error)")
-                    }
-                }
-                continuation.resume()
-            }
-        }
-    }
-
-    /// Apply Steam-specific performance optimizations
-    private func optimizeSteamProcesses() async {
-        let steamProcesses = await getSteamProcesses()
-
-        for steamProcess in steamProcesses {
-            // Steam has known CPU intensive background tasks that can be optimized
-            switch steamProcess.name.lowercased() {
-            case let name where name.contains("steamwebhelper"):
-                // SteamWebHelper often causes high CPU usage
-                await limitProcessCPU(pid: steamProcess.pid, maxCPU: 30.0)
-
-            case let name where name.contains("steam.exe"):
-                // Main Steam client - limit background tasks
-                await configureSteamClient(pid: steamProcess.pid)
-
-            case let name where name.contains("steamservice"):
-                // Steam service processes
-                await limitProcessCPU(pid: steamProcess.pid, maxCPU: 20.0)
-
-            default:
-                // Generic Steam process optimization
-                let cpuUsage = await getProcessCPUUsage(pid: steamProcess.pid)
-                if cpuUsage > 50.0 {
-                    await limitProcessCPU(pid: steamProcess.pid, maxCPU: 40.0)
-                }
-            }
-        }
-    }
-
-    /// Configure Steam client for optimal performance
-    private func configureSteamClient(pid: Int32) async {
-        logger.info("Optimizing Steam client performance for PID \(pid)")
-
-        // Send signals to Steam to reduce background activity
-        // Note: These are safe signals that don't terminate the process
-        await withCheckedContinuation { continuation in
-            processQueue.async {
-                // Use SIGUSR1 to signal Steam to reduce background processing
-                kill(pid, SIGUSR1)
-                continuation.resume()
-            }
-        }
-    }
-
-    /// Limit process CPU usage using nice and ionice
-    private func limitProcessCPU(pid: Int32, maxCPU: Double) async {
-        await withCheckedContinuation { continuation in
-            processQueue.async {
-                // Reduce process priority to limit CPU usage
-                let task = Process()
-                task.launchPath = "/usr/bin/renice"
-                task.arguments = ["10", "\(pid)"]  // Set to lower priority
-
-                do {
-                    try task.run()
-                    task.waitUntilExit()
-                    self.logger.info("Applied CPU limiting to process PID \(pid)")
-                } catch {
-                    self.logger.error("Failed to limit CPU for process PID \(pid): \(error)")
-                }
-
-                continuation.resume()
-            }
-        }
-    }
-
-    /// Throttle a process by suspending for longer and resuming briefly
-    private func throttleProcess(pid: Int32) async {
-        await withCheckedContinuation { continuation in
-            processQueue.async {
-                // Suspend process for 0.5s to reduce CPU usage
-                kill(pid, SIGSTOP)
-                self.logger.info("[Throttle] Suspended process PID \(pid) for 0.5s")
-                DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
-                    kill(pid, SIGCONT)
-                    self.logger.info("[Throttle] Resumed process PID \(pid) for 0.05s")
-                    // Briefly allow process to run, then suspend again
-                    DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) {
-                        kill(pid, SIGSTOP)
-                        self.logger.info("[Throttle] Re-suspended process PID \(pid)")
-                        continuation.resume()
-                    }
-                }
-            }
-        }
-    }
-
-    /// Safely terminate a runaway process
-    private func terminateProcess(pid: Int32, processName: String) async {
-        logger.warning("Terminating runaway process: \(processName) (PID: \(pid))")
-
-        await withCheckedContinuation { continuation in
-            processQueue.async {
-                // Try graceful termination first
-                kill(pid, SIGTERM)
-
-                // Force kill after 3 seconds if still running
-                DispatchQueue.global().asyncAfter(deadline: .now() + 3.0) {
-                    kill(pid, SIGKILL)
-                    self.logger.info("Force terminated process PID \(pid)")
-                    continuation.resume()
-                }
-            }
-        }
-
-        // Remove from active processes if it was tracked
-        if activeProcesses.contains(pid) {
-            removeActiveProcess(pid)
-        }
-    }
-
-    /// Get CPU usage for a specific process
-    private func getProcessCPUUsage(pid: Int32) async -> Double {
-        return await withCheckedContinuation { continuation in
-            let task = Process()
-            task.launchPath = "/bin/ps"
-            task.arguments = ["-p", "\(pid)", "-o", "pcpu="]
-
-            let pipe = Pipe()
-            task.standardOutput = pipe
-
-            do {
-                try task.run()
-                task.waitUntilExit()
-
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                if let output = String(data: data, encoding: .utf8),
-                    let cpuUsage = Double(output.trimmingCharacters(in: .whitespacesAndNewlines))
-                {
-                    continuation.resume(returning: cpuUsage)
-                } else {
-                    continuation.resume(returning: 0.0)
-                }
-            } catch {
-                continuation.resume(returning: 0.0)
-            }
-        }
-    }
-
-    /// Get all Wine-related processes
-    private func getWineProcesses() async -> [(pid: Int32, name: String)] {
-        return await withCheckedContinuation { continuation in
-            let task = Process()
-            task.launchPath = "/usr/bin/pgrep"
-            task.arguments = ["-f", "(wine|gptk)"]  // Look for both wine and gptk processes
-
-            let pipe = Pipe()
-            task.standardOutput = pipe
-
-            do {
-                try task.run()
-                task.waitUntilExit()
-
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                if let output = String(data: data, encoding: .utf8) {
-                    let pids = output.components(separatedBy: .newlines)
-                        .compactMap { Int32($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
-
-                    var processes: [(pid: Int32, name: String)] = []
-                    for pid in pids {
-                        if let name = self.getProcessName(pid: pid) {
-                            processes.append((pid: pid, name: name))
-                        }
-                    }
-                    continuation.resume(returning: processes)
-                } else {
-                    continuation.resume(returning: [])
-                }
-            } catch {
-                continuation.resume(returning: [])
-            }
-        }
-    }
-
-    /// Get Steam-specific processes
-    private func getSteamProcesses() async -> [(pid: Int32, name: String)] {
-        return await withCheckedContinuation { continuation in
-            let task = Process()
-            task.launchPath = "/usr/bin/pgrep"
-            task.arguments = ["-f", "steam"]
-
-            let pipe = Pipe()
-            task.standardOutput = pipe
-
-            do {
-                try task.run()
-                task.waitUntilExit()
-
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                if let output = String(data: data, encoding: .utf8) {
-                    let pids = output.components(separatedBy: .newlines)
-                        .compactMap { Int32($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
-
-                    var processes: [(pid: Int32, name: String)] = []
-                    for pid in pids {
-                        if let name = self.getProcessName(pid: pid) {
-                            processes.append((pid: pid, name: name))
-                        }
-                    }
-                    continuation.resume(returning: processes)
-                } else {
-                    continuation.resume(returning: [])
-                }
-            } catch {
-                continuation.resume(returning: [])
-            }
-        }
-    }
-
-    /// Get process name from PID
-    private func getProcessName(pid: Int32) -> String? {
-        let task = Process()
-        task.launchPath = "/bin/ps"
-        task.arguments = ["-p", "\(pid)", "-o", "comm="]
-
-        let pipe = Pipe()
-        task.standardOutput = pipe
-
-        do {
-            try task.run()
-            task.waitUntilExit()
-
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            if let output = String(data: data, encoding: .utf8) {
-                return output.trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-        } catch {
-            return nil
-        }
-
-        return nil
-    }
-
-    /// Emergency cleanup of all Game Porting Toolkit processes
-    func emergencyCleanup() async {
-        logger.warning("Performing emergency cleanup of all Game Porting Toolkit processes")
-
-        let allWineProcesses = await getWineProcesses()
-        for process in allWineProcesses {
-            await terminateProcess(pid: process.pid, processName: process.name)
-        }
-
-        // Clear active processes set
-        activeProcesses.removeAll()
-        logger.info("Emergency cleanup completed - terminated \(allWineProcesses.count) processes")
-    }
-
-    /// Get comprehensive system performance stats
-    func getPerformanceStats() async -> (
-        cpuUsage: Double, wineProcessCount: Int, activeProcessCount: Int
-    ) {
         let cpuUsage = await getCurrentCPUUsage()
-        let wineProcesses = await getWineProcesses()
-
-        return (
-            cpuUsage: cpuUsage,
-            wineProcessCount: wineProcesses.count,
-            activeProcessCount: activeProcesses.count
-        )
+        if cpuUsage > cpuThrottleThreshold {
+            throw WineError.highCPUUsage(cpuUsage)
+        }
     }
 
-    // MARK: - Deep Performance Optimizations
+    private func removeActiveProcess(_ pid: Int32) {
+        activeProcesses.remove(pid)
+    }
 
-    /// Mount a RAM disk and use it for Wine's TMPDIR and cache for high I/O games
-    func setupRAMDisk(sizeMB: Int = 512) -> String? {
-        let ramDiskName = "kimiz_ramdisk"
-        let ramDiskPath = "/Volumes/\(ramDiskName)"
-        let sizeSectors = sizeMB * 2048  // 512 bytes per sector
-        let fm = FileManager.default
-        if !fm.fileExists(atPath: ramDiskPath) {
-            let attachCmd =
-                "diskutil erasevolume HFS+ \(ramDiskName) $(hdiutil attach -nomount ram://\(sizeSectors))"
-            let task = Process()
-            task.launchPath = "/bin/zsh"
-            task.arguments = ["-c", attachCmd]
-            do {
-                try task.run()
-                task.waitUntilExit()
-            } catch {
-                print("[WineManager] Failed to create RAM disk: \(error)")
-                return nil
+    private func cleanupStaleProcesses() async {
+        // Optionally kill or clean up zombie/stuck Wine processes
+        // (Implementation can be added as needed)
+    }
+
+    // MARK: - Timeout & Monitoring
+
+    private func determineTimeout(for executablePath: String) -> TimeInterval {
+        let fileName = (executablePath as NSString).lastPathComponent.lowercased()
+        if fileName.contains("setup") || fileName.contains("install")
+            || fileName.contains("steamsetup")
+        {
+            return installerTimeout
+        }
+        if fileName.hasSuffix(".exe") && !fileName.contains("unins") {
+            return gameTimeout
+        }
+        return processTimeout
+    }
+
+    private func monitorProcessWithTimeout(process: Process, timeout: TimeInterval) {
+        Task {
+            let pid = process.processIdentifier
+            let checkInterval: TimeInterval = 30.0
+            var elapsed: TimeInterval = 0.0
+            while elapsed < timeout && process.isRunning {
+                try? await Task.sleep(nanoseconds: UInt64(checkInterval * 1_000_000_000))
+                elapsed += checkInterval
+            }
+            if process.isRunning && elapsed >= timeout {
+                process.terminate()
             }
         }
-        return ramDiskPath
     }
 
-    /// Set up optimized environment variables for Wine
-    func optimizedWineEnvironment(base: [String: String], useRAMDisk: Bool = false) -> [String:
-        String]
-    {
+    // MARK: - Environment Preparation
+
+    private func prepareEnvironment(base: [String: String]) -> [String: String] {
         var env = base
         env["WINEDEBUG"] = "-all"
+        env["WINE_LARGE_ADDRESS_AWARE"] = "1"
+        env["WINE_DISABLE_LAYER_COMPOSITOR"] = "1"
+        env["WINE_CPU_TOPOLOGY"] = "4:2"
         env["DXVK_HUD"] = "0"
         env["DXVK_LOG_LEVEL"] = "none"
         env["VKD3D_DEBUG"] = "none"
         env["MESA_NO_ERROR"] = "1"
-        // Prefer RAM disk for TMPDIR if requested
-        if useRAMDisk, let ramDisk = setupRAMDisk() {
-            env["TMPDIR"] = ramDisk
-        }
-        // Prefer Metal via MoltenVK if available
         env["VK_ICD_FILENAMES"] =
             "/Library/Frameworks/VMwareVM.framework/Resources/vulkan/icd.d/MoltenVK_icd.json"
+        if !env.keys.contains("WINE_AUDIO_DRIVER") {
+            env["WINE_AUDIO_DRIVER"] = "null"
+        }
+        // TMPDIR setup
+        let appSupportDir = (NSHomeDirectory() as NSString).appendingPathComponent(
+            "Library/Application Support/kimiz")
+        let tmpDir = (appSupportDir as NSString).appendingPathComponent("tmp")
+        if !fileManager.fileExists(atPath: tmpDir) {
+            try? fileManager.createDirectory(
+                atPath: tmpDir, withIntermediateDirectories: true, attributes: nil)
+        }
+        env["TMPDIR"] = tmpDir
         return env
     }
 
-    // Helper: Static version for use outside actor context
+    // MARK: - Static Optimized Environment (for BottleManager and others)
     static func staticOptimizedWineEnvironment(base: [String: String], useRAMDisk: Bool = false)
         -> [String: String]
     {
         var env = base
         env["WINEDEBUG"] = "-all"
+        env["WINE_LARGE_ADDRESS_AWARE"] = "1"
+        env["WINE_DISABLE_LAYER_COMPOSITOR"] = "1"
+        env["WINE_CPU_TOPOLOGY"] = "4:2"
         env["DXVK_HUD"] = "0"
         env["DXVK_LOG_LEVEL"] = "none"
         env["VKD3D_DEBUG"] = "none"
         env["MESA_NO_ERROR"] = "1"
-        if useRAMDisk {
-            // RAM disk setup is not actor-isolated, but this is a best-effort static path
-            let ramDiskPath = "/Volumes/kimiz_ramdisk"
-            env["TMPDIR"] = ramDiskPath
-        }
         env["VK_ICD_FILENAMES"] =
             "/Library/Frameworks/VMwareVM.framework/Resources/vulkan/icd.d/MoltenVK_icd.json"
+        if !env.keys.contains("WINE_AUDIO_DRIVER") {
+            env["WINE_AUDIO_DRIVER"] = "null"
+        }
+        if useRAMDisk {
+            let ramDiskPath = "/Volumes/kimiz_ramdisk"
+            env["TMPDIR"] = ramDiskPath
+        } else {
+            let appSupportDir = (NSHomeDirectory() as NSString).appendingPathComponent(
+                "Library/Application Support/kimiz")
+            let tmpDir = (appSupportDir as NSString).appendingPathComponent("tmp")
+            env["TMPDIR"] = tmpDir
+        }
         return env
     }
 
-    /// Monitor memory usage and kill Wine process if it exceeds threshold (MB)
-    private func monitorMemoryAndKill(pid: Int32, maxMB: Int = 4096) async {
-        await withCheckedContinuation { continuation in
+    // MARK: - CPU Usage
+
+    private func getCurrentCPUUsage() async -> Double {
+        return await withCheckedContinuation { continuation in
             let task = Process()
-            task.launchPath = "/bin/ps"
-            task.arguments = ["-p", "\(pid)", "-o", "rss="]
+            task.launchPath = "/usr/bin/top"
+            task.arguments = ["-l", "1", "-n", "0"]
             let pipe = Pipe()
             task.standardOutput = pipe
             do {
                 try task.run()
                 task.waitUntilExit()
                 let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                if let output = String(data: data, encoding: .utf8),
-                    let rssKB = Int(output.trimmingCharacters(in: .whitespacesAndNewlines))
-                {
-                    let rssMB = rssKB / 1024
-                    if rssMB > maxMB {
-                        self.logger.warning(
-                            "Killing Wine process PID \(pid) for excessive memory usage: \(rssMB) MB"
-                        )
-                        kill(pid, SIGTERM)
+                if let output = String(data: data, encoding: .utf8) {
+                    let lines = output.components(separatedBy: .newlines)
+                    for line in lines {
+                        if line.contains("CPU usage:") {
+                            let components = line.components(separatedBy: ",")
+                            if let userComponent = components.first(where: { $0.contains("user") })
+                            {
+                                let numbers = userComponent.components(separatedBy: .whitespaces)
+                                    .compactMap {
+                                        Double($0.replacingOccurrences(of: "%", with: ""))
+                                    }
+                                if let userCPU = numbers.first {
+                                    continuation.resume(returning: userCPU)
+                                    return
+                                }
+                            }
+                        }
                     }
                 }
-            } catch {}
-            continuation.resume()
-        }
-    }
-
-    /// Insert os_signpost for fine-grained tracing (requires import os.signpost)
-    private func tracePerformance(_ name: StaticString, block: () -> Void) {
-        if #available(macOS 10.14, *) {
-            let log = OSLog(subsystem: "dev.kimiz.gptkmanager", category: "signpost")
-            let signpostID = OSSignpostID(log: log)
-            os_signpost(.begin, log: log, name: name, signpostID: signpostID)
-            block()
-            os_signpost(.end, log: log, name: name, signpostID: signpostID)
-        } else {
-            block()
-        }
-    }
-
-    // --- PERFORMANCE: Aggressive Steam/Service Throttling ---
-    private func aggressivelyThrottleBackgroundProcesses() async {
-        // Throttle SteamWebHelper, winedevice, plugplay, and other known CPU hogs
-        let throttleTargets = ["steamwebhelper", "winedevice", "plugplay", "services", "rpcss"]
-        let wineProcesses = await getWineProcesses()
-        for proc in wineProcesses {
-            let name = proc.name.lowercased()
-            if throttleTargets.contains(where: { name.contains($0) }) {
-                await limitProcessCPU(pid: proc.pid, maxCPU: 20.0)
-                await throttleProcess(pid: proc.pid)
+                continuation.resume(returning: 0.0)
+            } catch {
+                continuation.resume(returning: 0.0)
             }
         }
     }

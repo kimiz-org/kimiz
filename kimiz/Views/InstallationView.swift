@@ -141,13 +141,20 @@ struct InstallationView: View {
 
                 if !gamePortingToolkitManager.isGPTKInstalled {
                     VStack(spacing: 12) {
-                        Text("Game Porting Toolkit 2 is not installed.")
+                        Text("Game Porting Toolkit 2.1 is not installed.")
                             .font(.headline)
                             .foregroundColor(.red)
                         Text(
-                            "Apple now distributes GPTK 2 as a signed, ARM-native .pkg installer. Homebrew is not supported for GPTK 2. Please use the official Apple installer."
+                            "Apple Game Porting Toolkit 2.1 provides the best compatibility for Windows games on macOS. The installer requires an Apple Developer account and will be downloaded from Apple's developer portal."
                         )
                         .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+
+                        Text(
+                            "If the automatic download fails, you'll be redirected to Apple's developer portal to download manually."
+                        )
+                        .font(.caption2)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
                     }
@@ -217,12 +224,19 @@ struct InstallationView: View {
                 ], spacing: ModernTheme.Spacing.md
             ) {
                 ModernActionCard(
-                    title: "Install Steam",
-                    subtitle: "Set up Steam for Windows games",
-                    icon: "cloud.fill",
-                    accentColor: .blue
+                    title: gamePortingToolkitManager.isSteamInstalled()
+                        ? "Launch Steam" : "Install Steam",
+                    subtitle: gamePortingToolkitManager.isSteamInstalled()
+                        ? "Open Steam client to play games" : "Set up Steam for Windows games",
+                    icon: gamePortingToolkitManager.isSteamInstalled()
+                        ? "play.circle.fill" : "cloud.fill",
+                    accentColor: gamePortingToolkitManager.isSteamInstalled() ? .green : .blue
                 ) {
-                    installSteam()
+                    if gamePortingToolkitManager.isSteamInstalled() {
+                        launchSteam()
+                    } else {
+                        installSteam()
+                    }
                 }
 
                 ModernActionCard(
@@ -244,12 +258,79 @@ struct InstallationView: View {
                 }
 
                 ModernActionCard(
+                    title: "Install Compatibility Tools",
+                    subtitle: "Install DXVK, vkd3d, winetricks, and corefonts",
+                    icon: "wrench.and.screwdriver",
+                    accentColor: .orange
+                ) {
+                    installCompatibilityTools()
+                }
+
+                ModernActionCard(
                     title: "System Check",
                     subtitle: "Verify system requirements",
                     icon: "checkmark.circle",
                     accentColor: .green
                 ) {
                     performSystemCheck()
+                }
+
+                ModernActionCard(
+                    title: "Install & Link Wine",
+                    subtitle: "Required for winetricks, DXVK, and all compatibility tools",
+                    icon: "wineglass",
+                    accentColor: .red
+                ) {
+                    installWineAndLink()
+                }
+
+                ModernActionCard(
+                    title: "Test DXVK Graphics",
+                    subtitle: "Verify if DXVK and graphics output are working",
+                    icon: "display",
+                    accentColor: .blue
+                ) {
+                    testDXVKGraphics()
+                }
+
+                ModernActionCard(
+                    title: "Reset Wine Prefix",
+                    subtitle: "Reset the Wine environment to default",
+                    icon: "arrow.counterclockwise.circle",
+                    accentColor: .gray
+                ) {
+                    resetWinePrefix()
+                }
+
+                ModernActionCard(
+                    title: "Clean Wine Install",
+                    subtitle: "Remove all Wine versions and reinstall cleanly",
+                    icon: "trash",
+                    accentColor: .pink
+                ) {
+                    cleanWineInstall()
+                }
+
+                ModernActionCard(
+                    title: "Reinstall DXVK & MoltenVK",
+                    subtitle: "Fix DXVK/Vulkan/MoltenVK setup for graphics",
+                    icon: "arrow.triangle.2.circlepath",
+                    accentColor: .purple
+                ) {
+                    reinstallDXVKAndMoltenVK()
+                }
+
+                ModernActionCard(
+                    title: "Fix DirectX 11/DXVK",
+                    subtitle: "Install DXVK into Wine prefix for DirectX 11 games",
+                    icon: "bolt.horizontal.circle",
+                    accentColor: .yellow
+                ) {
+                    Task {
+                        await gamePortingToolkitManager.fixDirectX11InPrefix()
+                        alertMessage = gamePortingToolkitManager.installationStatus
+                        showingAlert = true
+                    }
                 }
             }
         }
@@ -329,11 +410,293 @@ struct InstallationView: View {
         }
     }
 
+    private func launchSteam() {
+        Task {
+            do {
+                try await SteamManager.shared.launchSteam()
+                await MainActor.run {
+                    alertMessage = "Steam launched successfully!"
+                    showingAlert = true
+                }
+            } catch {
+                await MainActor.run {
+                    alertMessage = "Steam launch failed: \(error.localizedDescription)"
+                    showingAlert = true
+                }
+            }
+        }
+    }
+
     private func performSystemCheck() {
         Task {
             await MainActor.run {
                 alertMessage = "System check completed. All requirements met!"
                 showingAlert = true
+            }
+        }
+    }
+
+    private func installCompatibilityTools() {
+        isInstalling = true
+        alertMessage = ""
+        Task {
+            await MainActor.run {
+                alertMessage =
+                    "Installing compatibility tools (DXVK, vkd3d, winetricks, corefonts)..."
+                showingAlert = true
+            }
+            do {
+                // Install Homebrew packages
+                let brewPath =
+                    FileManager.default.fileExists(atPath: "/opt/homebrew/bin/brew")
+                    ? "/opt/homebrew/bin/brew" : "/usr/local/bin/brew"
+                let brewPackages = ["dxvk", "vkd3d", "winetricks"]
+                for pkg in brewPackages {
+                    let process = Process()
+                    process.executableURL = URL(fileURLWithPath: brewPath)
+                    process.arguments = ["install", pkg]
+                    try process.run()
+                    process.waitUntilExit()
+                }
+                // Install corefonts using winetricks
+                let winetricksPath =
+                    FileManager.default.fileExists(atPath: "/opt/homebrew/bin/winetricks")
+                    ? "/opt/homebrew/bin/winetricks" : "/usr/local/bin/winetricks"
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: winetricksPath)
+                process.arguments = ["corefonts"]
+                try process.run()
+                process.waitUntilExit()
+                await MainActor.run {
+                    isInstalling = false
+                    alertMessage = "Compatibility tools installed successfully!"
+                    showingAlert = true
+                }
+            } catch {
+                await MainActor.run {
+                    isInstalling = false
+                    alertMessage =
+                        "Failed to install compatibility tools: \(error.localizedDescription)"
+                    showingAlert = true
+                }
+            }
+        }
+    }
+
+    private func installWineAndLink() {
+        isInstalling = true
+        alertMessage = ""
+        Task {
+            await MainActor.run {
+                alertMessage = "Installing and linking Wine (required for winetricks and DXVK)..."
+                showingAlert = true
+            }
+            do {
+                // Install Wine via Homebrew Cask
+                let brewPath =
+                    FileManager.default.fileExists(atPath: "/opt/homebrew/bin/brew")
+                    ? "/opt/homebrew/bin/brew" : "/usr/local/bin/brew"
+                let installWine = Process()
+                installWine.executableURL = URL(fileURLWithPath: brewPath)
+                installWine.arguments = ["install", "--cask", "wine-stable"]
+                try installWine.run()
+                installWine.waitUntilExit()
+
+                // Force link Wine
+                let linkWine = Process()
+                linkWine.executableURL = URL(fileURLWithPath: brewPath)
+                linkWine.arguments = ["link", "--overwrite", "--force", "wine-stable"]
+                try linkWine.run()
+                linkWine.waitUntilExit()
+
+                await MainActor.run {
+                    isInstalling = false
+                    alertMessage =
+                        "Wine installed and linked successfully! You can now install compatibility tools."
+                    showingAlert = true
+                }
+            } catch {
+                await MainActor.run {
+                    isInstalling = false
+                    alertMessage = "Failed to install/link Wine: \(error.localizedDescription)"
+                    showingAlert = true
+                }
+            }
+        }
+    }
+
+    private func testDXVKGraphics() {
+        isInstalling = true
+        alertMessage = ""
+        Task {
+            await MainActor.run {
+                alertMessage = "Testing DXVK graphics output..."
+                showingAlert = true
+            }
+            do {
+                // Try running 'wine dxdiag' to test graphics
+                let winePath =
+                    FileManager.default.fileExists(atPath: "/opt/homebrew/bin/wine")
+                    ? "/opt/homebrew/bin/wine" : "/usr/local/bin/wine"
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: winePath)
+                process.arguments = ["dxdiag"]
+                try process.run()
+                process.waitUntilExit()
+                await MainActor.run {
+                    isInstalling = false
+                    alertMessage =
+                        process.terminationStatus == 0
+                        ? "DXVK test completed. If a window appeared, graphics are working. If not, check DXVK/MoltenVK installation and Metal support."
+                        : "DXVK test failed. Please check your DXVK and Vulkan/MoltenVK setup."
+                    showingAlert = true
+                }
+            } catch {
+                await MainActor.run {
+                    isInstalling = false
+                    alertMessage =
+                        "DXVK test could not be run: \(error.localizedDescription)\nMake sure Wine and DXVK are installed, and your Mac supports Metal."
+                    showingAlert = true
+                }
+            }
+        }
+    }
+
+    private func resetWinePrefix() {
+        isInstalling = true
+        alertMessage = ""
+        Task {
+            await MainActor.run {
+                alertMessage = "Resetting Wine prefix (bottle)..."
+                showingAlert = true
+            }
+            do {
+                let bottlePath = NSString(
+                    string: "~/Library/Application Support/kimiz/gptk-bottles/default"
+                ).expandingTildeInPath
+                if FileManager.default.fileExists(atPath: bottlePath) {
+                    try FileManager.default.removeItem(atPath: bottlePath)
+                }
+                try FileManager.default.createDirectory(
+                    atPath: bottlePath, withIntermediateDirectories: true, attributes: nil)
+                await MainActor.run {
+                    isInstalling = false
+                    alertMessage = "Wine prefix reset. You may now reinstall compatibility tools."
+                    showingAlert = true
+                }
+            } catch {
+                await MainActor.run {
+                    isInstalling = false
+                    alertMessage = "Failed to reset Wine prefix: \(error.localizedDescription)"
+                    showingAlert = true
+                }
+            }
+        }
+    }
+
+    private func cleanWineInstall() {
+        isInstalling = true
+        alertMessage = ""
+        Task {
+            await MainActor.run {
+                alertMessage = "Cleaning all Wine installations and reinstalling via Homebrew..."
+                showingAlert = true
+            }
+            do {
+                // Remove Wine.app and Wine Stable.app from /Applications
+                let fileManager = FileManager.default
+                let wineAppPaths = ["/Applications/Wine Stable.app", "/Applications/Wine.app"]
+                for appPath in wineAppPaths {
+                    if fileManager.fileExists(atPath: appPath) {
+                        try? fileManager.removeItem(atPath: appPath)
+                    }
+                }
+                // Uninstall Wine from Homebrew (cask and formula)
+                let brewPath =
+                    fileManager.fileExists(atPath: "/opt/homebrew/bin/brew")
+                    ? "/opt/homebrew/bin/brew" : "/usr/local/bin/brew"
+                let uninstallCask = Process()
+                uninstallCask.executableURL = URL(fileURLWithPath: brewPath)
+                uninstallCask.arguments = ["uninstall", "--cask", "wine-stable"]
+                try? uninstallCask.run()
+                uninstallCask.waitUntilExit()
+                let uninstallFormula = Process()
+                uninstallFormula.executableURL = URL(fileURLWithPath: brewPath)
+                uninstallFormula.arguments = ["uninstall", "wine-stable"]
+                try? uninstallFormula.run()
+                uninstallFormula.waitUntilExit()
+                // Reinstall Wine via Homebrew cask
+                let installWine = Process()
+                installWine.executableURL = URL(fileURLWithPath: brewPath)
+                installWine.arguments = ["install", "--cask", "wine-stable"]
+                try installWine.run()
+                installWine.waitUntilExit()
+                await MainActor.run {
+                    isInstalling = false
+                    alertMessage =
+                        "Wine cleaned and reinstalled via Homebrew. You can now install compatibility tools."
+                    showingAlert = true
+                }
+            } catch {
+                await MainActor.run {
+                    isInstalling = false
+                    alertMessage = "Failed to clean/reinstall Wine: \(error.localizedDescription)"
+                    showingAlert = true
+                }
+            }
+        }
+    }
+
+    private func reinstallDXVKAndMoltenVK() {
+        isInstalling = true
+        alertMessage = ""
+        Task {
+            await MainActor.run {
+                alertMessage = "Reinstalling DXVK and MoltenVK via Homebrew..."
+                showingAlert = true
+            }
+            do {
+                let fileManager = FileManager.default
+                let brewPath =
+                    fileManager.fileExists(atPath: "/opt/homebrew/bin/brew")
+                    ? "/opt/homebrew/bin/brew" : "/usr/local/bin/brew"
+                // Reinstall DXVK
+                let dxvkProc = Process()
+                dxvkProc.executableURL = URL(fileURLWithPath: brewPath)
+                dxvkProc.arguments = ["reinstall", "dxvk"]
+                try dxvkProc.run()
+                dxvkProc.waitUntilExit()
+                // Reinstall MoltenVK
+                let mvkProc = Process()
+                mvkProc.executableURL = URL(fileURLWithPath: brewPath)
+                mvkProc.arguments = ["reinstall", "molten-vk"]
+                try mvkProc.run()
+                mvkProc.waitUntilExit()
+                // Copy/link MoltenVK ICD JSON to Vulkan path
+                let srcICD = "/opt/homebrew/share/vulkan/icd.d/MoltenVK_icd.json"
+                let dstICD = "/usr/local/share/vulkan/icd.d/MoltenVK_icd.json"
+                if fileManager.fileExists(atPath: srcICD) {
+                    try? fileManager.createDirectory(
+                        atPath: "/usr/local/share/vulkan/icd.d", withIntermediateDirectories: true,
+                        attributes: nil)
+                    if fileManager.fileExists(atPath: dstICD) {
+                        try? fileManager.removeItem(atPath: dstICD)
+                    }
+                    try? fileManager.copyItem(atPath: srcICD, toPath: dstICD)
+                }
+                await MainActor.run {
+                    isInstalling = false
+                    alertMessage =
+                        "DXVK and MoltenVK reinstalled. If the DXVK test still fails, check your Mac's Metal support and reboot."
+                    showingAlert = true
+                }
+            } catch {
+                await MainActor.run {
+                    isInstalling = false
+                    alertMessage =
+                        "Failed to reinstall DXVK/MoltenVK: \(error.localizedDescription)"
+                    showingAlert = true
+                }
             }
         }
     }
