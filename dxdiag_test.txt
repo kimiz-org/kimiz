@@ -1,0 +1,18 @@
+------------------
+System Information
+------------------
+Time of this report: 6/11/2025, 14:42:50
+       Machine name: 192
+   Operating System: Windows XP Professional
+           Language: English (Regional Setting: English)
+System Manufacturer: 
+       System Model: 
+               BIOS: 
+          Processor: VirtualApple @ 2.50GHz(14 CPUs), ~2400MHz
+             Memory: 24575MB RAM
+          Page File: 16133MB used, 8442MB available
+        Windows Dir: C:\windows
+    DirectX Version: = "DirectX 9.0c (4.09.0000.0904)
+DX Setup Parameters: Not present
+     DxDiag Version: 
+

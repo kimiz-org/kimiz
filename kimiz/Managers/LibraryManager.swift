@@ -8,6 +8,8 @@
 import Foundation
 import SwiftUI
 
+// NOTE: If you see 'Cannot find type Game in scope', ensure Game.swift is in the same Xcode target as this file.
+
 // Known important executables and their typical locations
 struct ExecutableInfo {
     let name: String
@@ -383,11 +385,27 @@ internal class LibraryManager: ObservableObject {
 
     // MARK: - User Games Management
 
+    /// Synchronous version for async/await code
+    func loadUserGames() -> [Game] {
+        let userGamesPath = NSHomeDirectory() + "/Library/Application Support/kimiz/userGames.json"
+        guard FileManager.default.fileExists(atPath: userGamesPath),
+            let data = try? Data(contentsOf: URL(fileURLWithPath: userGamesPath))
+        else {
+            return []
+        }
+        do {
+            let games = try JSONDecoder().decode([Game].self, from: data)
+            return games
+        } catch {
+            print("Error loading user games: \(error)")
+            return []
+        }
+    }
+
     func addUserGame(_ game: Game) async {
         var userGames = loadUserGames()
         userGames.append(game)
         saveUserGames(userGames)
-
         await scanForImportantExecutables()  // Refresh the list
     }
 
@@ -395,52 +413,54 @@ internal class LibraryManager: ObservableObject {
         print("[LibraryManager] Starting removal of game: \(game.name) (ID: \(game.id))")
         var userGames = loadUserGames()
         print("[LibraryManager] Loaded \(userGames.count) user games")
-
         let originalCount = userGames.count
         userGames.removeAll { $0.id == game.id }
         let newCount = userGames.count
-
         print("[LibraryManager] Removed \(originalCount - newCount) games from user games list")
         saveUserGames(userGames)
         print("[LibraryManager] Saved updated user games list")
-
         await scanForImportantExecutables()  // Refresh the list
         print("[LibraryManager] Rescanned and refreshed game list")
     }
 
-    private func loadUserGames() -> [Game] {
-        let userGamesPath = NSHomeDirectory() + "/Library/Application Support/kimiz/userGames.json"
-
-        guard fileManager.fileExists(atPath: userGamesPath),
-            let data = try? Data(contentsOf: URL(fileURLWithPath: userGamesPath))
-        else {
-            return []
-        }
-
-        do {
-            return try JSONDecoder().decode([Game].self, from: data)
-        } catch {
-            print("Error loading user games: \(error)")
-            return []
+    /// Asynchronous version for UI/background use
+    private func loadUserGames(completion: (([Game]) -> Void)? = nil) {
+        DispatchQueue.global(qos: .utility).async {
+            let userGamesPath =
+                NSHomeDirectory() + "/Library/Application Support/kimiz/userGames.json"
+            guard FileManager.default.fileExists(atPath: userGamesPath),
+                let data = try? Data(contentsOf: URL(fileURLWithPath: userGamesPath))
+            else {
+                DispatchQueue.main.async { completion?([]) }
+                return
+            }
+            do {
+                let games = try JSONDecoder().decode([Game].self, from: data)
+                DispatchQueue.main.async { completion?(games) }
+            } catch {
+                print("Error loading user games: \(error)")
+                DispatchQueue.main.async { completion?([]) }
+            }
         }
     }
 
-    private func saveUserGames(_ games: [Game]) {
-        let supportDir = NSHomeDirectory() + "/Library/Application Support/kimiz"
-        let userGamesPath = supportDir + "/userGames.json"
-
-        // Create directory if needed
-        try? fileManager.createDirectory(
-            atPath: supportDir,
-            withIntermediateDirectories: true,
-            attributes: nil
-        )
-
-        do {
-            let data = try JSONEncoder().encode(games)
-            try data.write(to: URL(fileURLWithPath: userGamesPath))
-        } catch {
-            print("Error saving user games: \(error)")
+    private func saveUserGames(_ games: [Game], completion: ((Error?) -> Void)? = nil) {
+        DispatchQueue.global(qos: .utility).async {
+            let supportDir = NSHomeDirectory() + "/Library/Application Support/kimiz"
+            let userGamesPath = supportDir + "/userGames.json"
+            do {
+                try FileManager.default.createDirectory(
+                    atPath: supportDir,
+                    withIntermediateDirectories: true,
+                    attributes: nil
+                )
+                let data = try JSONEncoder().encode(games)
+                try data.write(to: URL(fileURLWithPath: userGamesPath))
+                DispatchQueue.main.async { completion?(nil) }
+            } catch {
+                print("Error saving user games: \(error)")
+                DispatchQueue.main.async { completion?(error) }
+            }
         }
     }
 }

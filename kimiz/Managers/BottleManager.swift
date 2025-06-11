@@ -346,7 +346,6 @@ internal class BottleManager: ObservableObject {
             "/opt/homebrew/bin/brew",  // Apple Silicon
             "/usr/local/bin/brew",  // Intel
         ]
-
         return homebrewPaths.contains { path in
             FileManager.default.fileExists(atPath: path)
         }
@@ -358,7 +357,6 @@ internal class BottleManager: ObservableObject {
             "/opt/homebrew/bin/brew",  // Apple Silicon
             "/usr/local/bin/brew",  // Intel
         ]
-
         return homebrewPaths.first { path in
             FileManager.default.fileExists(atPath: path)
         }

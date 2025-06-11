@@ -1,21 +1,21 @@
 //
-//  GamePortingToolkitManager_Fixed.swift
+//  GamePortingToolkitManager.swift
 //  kimiz
-//
-//  Fixed version without website redirects
 //
 
 import AppKit
 import Foundation
 import SwiftUI
 
-// Ensure these are available for type checking and usage
-// If these are not modules, use relative import or ensure all files are in the same target
-// If needed, adjust the import paths below
-// import Models // If you have a Models module
-// import Managers // If you have a Managers module
-// The following lines ensure type visibility for cross-file type checks
-// If you get errors, ensure all files are in the same target in Xcode
+// Explicitly import all managers and models for type visibility
+// These should be in the same target, but if not, use @testable import kimiz or public/internal access as needed
+// If you still get errors, ensure all files are in the same target in Xcode
+
+// Add these at the top if not present:
+// import "../Models/Game.swift"
+// import "LibraryManager.swift"
+// import "SteamManager.swift"
+// import "EpicGamesManager.swift"
 
 // GPTK-specific error types
 enum GPTKError: LocalizedError {
@@ -40,9 +40,6 @@ enum GPTKError: LocalizedError {
         }
     }
 }
-
-// Explicitly import the managers for type visibility
-// If using a module, use @testable import kimiz, otherwise ensure all files are in the same target
 
 @MainActor
 internal class GamePortingToolkitManager: ObservableObject {
@@ -589,117 +586,37 @@ internal class GamePortingToolkitManager: ObservableObject {
 
     // MARK: - Game Management (Compatibility methods for views)
 
-    /// Scan for games in Wine bottles
+    /// Scan for games in Wine bottles (delegates to LibraryManager)
     func scanForGames() async {
+        await autoSetupGameEnvironment()
         await MainActor.run {
             self.installationStatus = "🔍 Scanning for games in Wine bottles..."
         }
-
-        // Scan the default bottle for games
-        let defaultBottlePath = NSString(
-            string: "~/Library/Application Support/kimiz/gptk-bottles/default"
-        ).expandingTildeInPath
-        let driveC = (defaultBottlePath as NSString).appendingPathComponent("drive_c")
-
-        var foundGames: [Any] = []
-
-        if FileManager.default.fileExists(atPath: driveC) {
-            // Look for common game directories
-            let commonGamePaths = [
-                "Program Files/Steam/steamapps/common",
-                "Program Files (x86)/Steam/steamapps/common",
-                "Program Files/Epic Games",
-                "Program Files (x86)/Epic Games",
-                "Program Files/GOG Galaxy",
-                "Program Files (x86)/GOG Galaxy",
-            ]
-
-            for gamePath in commonGamePaths {
-                let fullPath = (driveC as NSString).appendingPathComponent(gamePath)
-                if FileManager.default.fileExists(atPath: fullPath) {
-                    // Scan this directory for executables
-                    if let contents = try? FileManager.default.contentsOfDirectory(atPath: fullPath)
-                    {
-                        for item in contents {
-                            let itemPath = (fullPath as NSString).appendingPathComponent(item)
-                            var isDirectory: ObjCBool = false
-                            if FileManager.default.fileExists(
-                                atPath: itemPath, isDirectory: &isDirectory)
-                                && isDirectory.boolValue
-                            {
-                                // Look for executable files in this game directory
-                                if let gameContents = try? FileManager.default.contentsOfDirectory(
-                                    atPath: itemPath)
-                                {
-                                    for file in gameContents {
-                                        if file.hasSuffix(".exe") && !file.contains("unins")
-                                            && !file.contains("setup")
-                                        {
-                                            let execPath = (itemPath as NSString)
-                                                .appendingPathComponent(file)
-                                            foundGames.append([
-                                                "name": item,
-                                                "executablePath": execPath,
-                                                "installPath": itemPath,
-                                            ])
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
+        await LibraryManager.shared.scanForImportantExecutables()
         await MainActor.run {
-            self.installedGames = foundGames
-            self.installationStatus = "✅ Found \(foundGames.count) installed games"
+            self.installedGames = LibraryManager.shared.discoveredGames
+            self.installationStatus = "✅ Found \(self.installedGames.count) installed games"
         }
     }
 
-    /// Get installed games list - returns empty array for now (delegated to EngineManager)
-    @Published var installedGames: [Any] = []
-
-    /// Temporary computed property to bridge compatibility with views expecting [Game]
-    var games: [Any] {
-        return installedGames
-    }
+    /// Get installed games list
+    @Published var installedGames: [Game] = []
 
     /// Add user game to the library
-    func addUserGame(_ game: Any) async {
+    func addUserGame(_ game: Game) async {
+        await LibraryManager.shared.addUserGame(game)
+        await scanForGames()
         await MainActor.run {
-            // Check if game is already in the list
-            let gameName = extractGameName(from: game)
-            let alreadyExists = installedGames.contains { existingGame in
-                extractGameName(from: existingGame) == gameName
-            }
-
-            if !alreadyExists {
-                self.installedGames.append(game)
-                self.installationStatus = "✅ Game '\(gameName)' added to library"
-            } else {
-                self.installationStatus = "⚠️ Game '\(gameName)' is already in the library"
-            }
+            self.installationStatus = "✅ Game '\(game.name)' added to library"
         }
     }
 
     /// Remove user game from the library
-    func removeUserGame(_ game: Any) async {
+    func removeUserGame(_ game: Game) async {
+        await LibraryManager.shared.removeUserGame(game)
+        await scanForGames()
         await MainActor.run {
-            let gameName = extractGameName(from: game)
-            let initialCount = self.installedGames.count
-
-            self.installedGames.removeAll { existingGame in
-                extractGameName(from: existingGame) == gameName
-            }
-
-            let removedCount = initialCount - self.installedGames.count
-            if removedCount > 0 {
-                self.installationStatus = "✅ Game '\(gameName)' removed from library"
-            } else {
-                self.installationStatus = "⚠️ Game '\(gameName)' was not found in the library"
-            }
+            self.installationStatus = "✅ Game '\(game.name)' removed from library"
         }
     }
 
@@ -731,240 +648,6 @@ internal class GamePortingToolkitManager: ObservableObject {
         return defaultBottlePath
     }
 
-    /// Install essential Windows graphics libraries using winetricks
-    private func installEssentialGraphicsLibraries(_ bottlePath: String, winePath: String)
-        async throws
-    {
-        // List of essential libraries for gaming
-        let essentialLibs = [
-            "vcrun2019",  // Visual C++ 2019 Runtime
-            "d3dcompiler_47",  // DirectX shader compiler
-            "dxvk",  // Vulkan-based DirectX implementation
-            "corefonts",  // Windows core fonts
-        ]
-
-        let winetricksPath = "/opt/homebrew/bin/winetricks"
-        let wineserverPath = (winePath as NSString).deletingLastPathComponent + "/wineserver"
-
-        for lib in essentialLibs {
-            do {
-                print("[GamePortingToolkitManager] Installing \(lib) using winetricks...")
-
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: winetricksPath)
-                process.arguments = ["-q", lib]
-                process.environment = [
-                    "WINE": winePath,
-                    "WINESERVER": wineserverPath,
-                    "WINEPREFIX": bottlePath,
-                    "WINEDEBUG": "-all",
-                    "DISPLAY": ":0.0",
-                ]
-                process.currentDirectoryURL = URL(fileURLWithPath: bottlePath)
-
-                try process.run()
-                process.waitUntilExit()
-
-                if process.terminationStatus == 0 {
-                    print("[GamePortingToolkitManager] Successfully installed \(lib)")
-                } else {
-                    print("[GamePortingToolkitManager] Failed to install \(lib), but continuing...")
-                }
-            } catch {
-                print("[GamePortingToolkitManager] Error installing \(lib): \(error)")
-            }
-        }
-    }
-
-    /// Configure Wine prefix for better graphics compatibility
-    private func configureWinePrefixForGraphics(_ bottlePath: String, winePath: String) async throws
-    {
-        let configCommands = [
-            // Set Windows version to Windows 10
-            "wine reg add 'HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows NT\\CurrentVersion' /v CurrentVersion /t REG_SZ /d '10.0' /f",
-
-            // Configure graphics settings
-            "wine reg add 'HKEY_CURRENT_USER\\Software\\Wine\\Direct3D' /v DirectDrawRenderer /t REG_SZ /d 'opengl' /f",
-            "wine reg add 'HKEY_CURRENT_USER\\Software\\Wine\\Direct3D' /v Multisampling /t REG_SZ /d 'enabled' /f",
-            "wine reg add 'HKEY_CURRENT_USER\\Software\\Wine\\Direct3D' /v OffscreenRenderingMode /t REG_SZ /d 'backbuffer' /f",
-            "wine reg add 'HKEY_CURRENT_USER\\Software\\Wine\\Direct3D' /v VideoMemorySize /t REG_DWORD /d 2048 /f",
-
-            // Disable Wine debugging for better performance
-            "wine reg add 'HKEY_CURRENT_USER\\Software\\Wine\\Debug' /v RelayExclude /t REG_SZ /d 'ntdll.RtlEnterCriticalSection;ntdll.RtlLeaveCriticalSection' /f",
-        ]
-
-        let environment = [
-            "WINEPREFIX": bottlePath,
-            "DISPLAY": ":0.0",
-            "WINEDEBUG": "-all",
-        ]
-
-        for command in configCommands {
-            do {
-                let components = command.components(separatedBy: " ")
-                if let wineCommand = components.first, components.count > 1 {
-                    let args = Array(components.dropFirst())
-
-                    try await WineManager.shared.runWineProcess(
-                        winePath: winePath,
-                        executablePath: wineCommand,
-                        arguments: args,
-                        environment: environment,
-                        workingDirectory: bottlePath,
-                        defaultBottlePath: bottlePath
-                    )
-                }
-            } catch {
-                // Continue with other configuration commands even if one fails
-                print(
-                    "[GamePortingToolkitManager] Wine config command failed: \(command), error: \(error)"
-                )
-            }
-        }
-
-        print(
-            "[GamePortingToolkitManager] Wine prefix configured for better graphics compatibility")
-    }
-
-    /// Apply universal drive and GPU optimizations for all games
-    private func applyUniversalOptimizations(
-        _ environment: inout [String: String], executablePath: String
-    ) async {
-        let executableName = (executablePath as NSString).lastPathComponent.lowercased()
-
-        // Apply system-level optimizations first
-        await applySystemOptimizations()
-
-        // General drive optimizations
-        environment["WINE_DRIVE_OPTIMIZATION"] = "1"
-        environment["WINE_SHARED_MEMORY"] = "1"
-        environment["WINE_LARGE_ADDRESS_AWARE"] = "1"
-        environment["WINE_FULLSCREEN_INTEGER_SCALING"] = "1"
-
-        // General GPU optimizations
-        environment["DXVK_ASYNC"] = "1"
-        environment["DXVK_FILTER_DEVICE_NAME"] = "AMD,NVIDIA,Intel,Apple"
-        environment["DXVK_CONFIG_FILE"] = defaultBottlePath + "/dxvk.conf"
-        environment["DXVK_HUD"] = "fps,gpuload,memory"
-        environment["DXVK_LOG_LEVEL"] = "none"
-        environment["DXVK_STATE_CACHE"] = "1"
-        environment["DXVK_STATE_CACHE_PATH"] = defaultBottlePath + "/dxvk_cache"
-        environment["DXVK_FRAME_RATE"] = "0"  // uncapped
-        environment["DXVK_ENABLE_NVAPI"] = "1"
-        environment["DXVK_NVAPI_DEFAULT_DEVICE_ID"] = "0x1E82"  // Fallback for NVIDIA
-        environment["DXVK_NVAPI_DEFAULT_VENDOR_ID"] = "0x10DE"
-        environment["DXVK_FAKE_DXGI_ADAPTER"] = "1"
-        environment["DXVK_USE_PIPECOMPILER"] = "1"
-        environment["DXVK_ENABLE_PIPELINE_CACHE"] = "1"
-        environment["DXVK_CONFIG"] = defaultBottlePath + "/dxvk.conf"
-
-        // General DirectX compatibility
-        environment["WINEDLLOVERRIDES"] =
-            "d3d11,d3d10core,d3d9,dxgi,xinput1_4,xinput1_3,winhttp=n,b"
-        environment["WINE_VK_LAYER_PATH"] = "/usr/local/share/vulkan/explicit_layer.d"
-        environment["VK_ICD_FILENAMES"] = "/usr/local/share/vulkan/icd.d/MoltenVK_icd.json"
-        environment["VK_INSTANCE_LAYERS"] = "VK_LAYER_MOLTENVK"
-        environment["MOLTENVK_CONFIG_FILE"] = defaultBottlePath + "/moltenvk.conf"
-
-        // General input optimizations
-        environment["WINE_RAW_INPUT"] = "1"
-        environment["WINE_MOUSE_ACCELERATION"] = "0"
-        environment["WINE_JOYSTICK_DISABLE"] = "0"
-
-        // General memory and performance optimizations
-        environment["WINE_HEAP_DELAY_FREE"] = "1"
-        environment["WINE_DISABLE_LAYER_COMPOSITOR"] = "1"
-        environment["WINE_AUDIO_DRIVER"] = "pulse"
-        environment["WINEESYNC"] = "1"
-        environment["WINEFSYNC"] = "1"
-        environment["WINEDEBUG"] = "-all"
-        environment["GL_SHADER_CACHE"] = "1"
-        environment["GL_SHADER_CACHE_PATH"] = defaultBottlePath + "/shader_cache"
-        environment["__GL_THREADED_OPTIMIZATIONS"] = "1"
-        environment["__GL_SYNC_TO_VBLANK"] = "0"
-        environment["__GL_GSYNC_ALLOWED"] = "1"
-        environment["__GL_VRR_ALLOWED"] = "1"
-
-        // General macOS-specific optimizations
-        environment["MVK_CONFIG_SYNCHRONOUS_QUEUE_SUBMITS"] = "0"
-        environment["MVK_CONFIG_PRESENT_WITH_COMMAND_BUFFER"] = "1"
-        environment["MVK_CONFIG_SWAPCHAIN_MAG_FILTER"] = "1"
-        environment["MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS"] = "1"
-        environment["MVK_CONFIG_FAST_MATH_ENABLED"] = "1"
-        environment["MVK_CONFIG_LOG_LEVEL"] = "0"
-
-        // Create DXVK configuration for better compatibility
-        await createUniversalDXVKConfig()
-
-        print(
-            "[GamePortingToolkitManager] Applied universal drive and GPU optimizations for \(executableName)"
-        )
-    }
-
-    /// Create universal DXVK configuration file
-    private func createUniversalDXVKConfig() async {
-        let dxvkConfigPath = defaultBottlePath + "/dxvk.conf"
-        let dxvkConfig = """
-            # Universal DXVK Configuration for Kimiz
-            # Optimized for all games on macOS with Game Porting Toolkit
-
-            # Memory optimizations
-            dxvk.maxAvailableMemory = 4096
-            dxvk.maxChunkSize = 256
-            dxvk.enableAsync = True
-            dxvk.memoryTrackResources = True
-
-            # Performance optimizations
-            dxvk.useRawSsbo = True
-            dxvk.shrinkNvidiaHvv = False
-            dxvk.enableGraphicsPipelineLibrary = Auto
-            dxvk.enableStateCache = True
-            dxvk.numCompilerThreads = 0  # Use all available cores
-            dxvk.hud = fps,memory,gpuload
-            dxvk.presentMode = mailbox
-            dxvk.enableAsync = True
-            dxvk.tearFree = True
-            """
-
-        do {
-            try dxvkConfig.write(toFile: dxvkConfigPath, atomically: true, encoding: .utf8)
-            print("[GamePortingToolkitManager] Created universal DXVK configuration")
-        } catch {
-            print("[GamePortingToolkitManager] Failed to create DXVK config: \(error)")
-        }
-    }
-
-    /// Configure universal system-level optimizations
-    private func applySystemOptimizations() async {
-        // Disable Spotlight indexing for Wine bottles temporarily
-        let disableSpotlightCmd = "mdutil -i off \(defaultBottlePath) 2>/dev/null || true"
-        let task = Process()
-        task.launchPath = "/bin/bash"
-        task.arguments = ["-c", disableSpotlightCmd]
-
-        do {
-            try task.run()
-            task.waitUntilExit()
-            print("[GamePortingToolkitManager] Disabled Spotlight indexing for Wine bottles")
-        } catch {
-            print("[GamePortingToolkitManager] Could not disable Spotlight indexing: \(error)")
-        }
-
-        // Apply system memory pressure relief
-        let memoryOptimCmd = "purge 2>/dev/null || true"
-        let memTask = Process()
-        memTask.launchPath = "/bin/bash"
-        memTask.arguments = ["-c", memoryOptimCmd]
-
-        do {
-            try memTask.run()
-            memTask.waitUntilExit()
-            print("[GamePortingToolkitManager] Applied memory pressure relief")
-        } catch {
-            print("[GamePortingToolkitManager] Could not apply memory optimization: \(error)")
-        }
-    }
-
     /// Fix DirectX 11/DXVK in the default Wine prefix using winetricks
     func fixDirectX11InPrefix() async {
         await MainActor.run {
@@ -979,7 +662,28 @@ internal class GamePortingToolkitManager: ObservableObject {
             fileManager.fileExists(atPath: "/opt/homebrew/bin/wine")
             ? "/opt/homebrew/bin/wine" : "/usr/local/bin/wine"
         let wineserverPath = (winePath as NSString).deletingLastPathComponent + "/wineserver"
+        let system32Path = (bottlePath as NSString).appendingPathComponent(
+            "drive_c/windows/system32")
+        let dxvkDlls = ["d3d11.dll", "dxgi.dll", "d3d10.dll", "d3d10_1.dll", "d3d10core.dll"]
         do {
+            // 1. Initialize Wine prefix if needed
+            if !fileManager.fileExists(
+                atPath: (bottlePath as NSString).appendingPathComponent("system.reg"))
+            {
+                let wineboot = Process()
+                wineboot.executableURL = URL(fileURLWithPath: winePath)
+                wineboot.arguments = ["wineboot", "--init"]
+                wineboot.environment = [
+                    "WINEPREFIX": bottlePath,
+                    "WINEDEBUG": "-all",
+                    "DISPLAY": ":0.0",
+                ]
+                wineboot.currentDirectoryURL = URL(fileURLWithPath: bottlePath)
+                try wineboot.run()
+                wineboot.waitUntilExit()
+            }
+
+            // 2. Run winetricks dxvk and capture output
             let process = Process()
             process.executableURL = URL(fileURLWithPath: winetricksPath)
             process.arguments = ["-q", "dxvk"]
@@ -991,21 +695,150 @@ internal class GamePortingToolkitManager: ObservableObject {
                 "DISPLAY": ":0.0",
             ]
             process.currentDirectoryURL = URL(fileURLWithPath: bottlePath)
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = pipe
             try process.run()
             process.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let output = String(data: data, encoding: .utf8) ?? ""
+
+            // 3. Check for DXVK DLLs
+            let allDllsPresent = dxvkDlls.allSatisfy {
+                fileManager.fileExists(
+                    atPath: (system32Path as NSString).appendingPathComponent($0))
+            }
+
             await MainActor.run {
-                if process.terminationStatus == 0 {
+                if process.terminationStatus == 0 && allDllsPresent {
                     self.installationStatus =
-                        "DXVK (DirectX 11/10/9 support) successfully installed in Wine prefix! Try launching your game again."
+                        "✅ DXVK (DirectX 11/10/9 support) successfully installed in Wine prefix! Try launching your game again."
                 } else {
                     self.installationStatus =
-                        "Failed to install DXVK (DirectX 11 support) in Wine prefix. Please check the log or try again."
+                        "❌ Failed to install DXVK (DirectX 11 support) in Wine prefix. Output: \n\(output)"
                 }
             }
         } catch {
             await MainActor.run {
                 self.installationStatus =
-                    "Error running winetricks dxvk (DXVK/DirectX 11 setup): \(error.localizedDescription)"
+                    "❌ Error running winetricks dxvk (DXVK/DirectX 11 setup): \(error.localizedDescription)"
+            }
+        }
+    }
+
+    /// Automatically install all required software for running games
+    func autoSetupGameEnvironment() async {
+        // 1. Ensure Homebrew is installed
+        do {
+            try await ensureHomebrewInstalled()
+        } catch {
+            await MainActor.run {
+                self.installationStatus =
+                    "❌ Failed to install Homebrew: \(error.localizedDescription)"
+            }
+            return
+        }
+
+        // 2. Install Wine
+        let brewPath =
+            fileManager.fileExists(atPath: "/opt/homebrew/bin/brew")
+            ? "/opt/homebrew/bin/brew" : "/usr/local/bin/brew"
+        let winePath =
+            fileManager.fileExists(atPath: "/opt/homebrew/bin/wine")
+            ? "/opt/homebrew/bin/wine" : "/usr/local/bin/wine"
+        if !fileManager.fileExists(atPath: winePath) {
+            await MainActor.run {
+                self.installationStatus = "🍷 Installing Wine via Homebrew..."
+            }
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: brewPath)
+            process.arguments = ["install", "wine-stable"]
+            do {
+                try process.run()
+                process.waitUntilExit()
+                if process.terminationStatus == 0 {
+                    await MainActor.run {
+                        self.installationStatus = "✅ Wine installed successfully."
+                    }
+                } else {
+                    await MainActor.run {
+                        self.installationStatus = "❌ Failed to install Wine."
+                    }
+                    return
+                }
+            } catch {
+                await MainActor.run {
+                    self.installationStatus =
+                        "❌ Error installing Wine: \(error.localizedDescription)"
+                }
+                return
+            }
+        }
+
+        // 3. Install winetricks
+        let winetricksPath =
+            fileManager.fileExists(atPath: "/opt/homebrew/bin/winetricks")
+            ? "/opt/homebrew/bin/winetricks" : "/usr/local/bin/winetricks"
+        if !fileManager.fileExists(atPath: winetricksPath) {
+            await MainActor.run {
+                self.installationStatus = "🔧 Installing winetricks via Homebrew..."
+            }
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: brewPath)
+            process.arguments = ["install", "winetricks"]
+            do {
+                try process.run()
+                process.waitUntilExit()
+                if process.terminationStatus == 0 {
+                    await MainActor.run {
+                        self.installationStatus = "✅ winetricks installed successfully."
+                    }
+                } else {
+                    await MainActor.run {
+                        self.installationStatus = "❌ Failed to install winetricks."
+                    }
+                    return
+                }
+            } catch {
+                await MainActor.run {
+                    self.installationStatus =
+                        "❌ Error installing winetricks: \(error.localizedDescription)"
+                }
+                return
+            }
+        }
+
+        // 4. Install DXVK in the default bottle
+        await MainActor.run {
+            self.installationStatus = "🛠 Installing DXVK (DirectX 11 support) in Wine prefix..."
+        }
+        let bottlePath = defaultBottlePath
+        let wineserverPath = (winePath as NSString).deletingLastPathComponent + "/wineserver"
+        let dxvkProcess = Process()
+        dxvkProcess.executableURL = URL(fileURLWithPath: winetricksPath)
+        dxvkProcess.arguments = ["-q", "dxvk"]
+        dxvkProcess.environment = [
+            "WINE": winePath,
+            "WINESERVER": wineserverPath,
+            "WINEPREFIX": bottlePath,
+            "WINEDEBUG": "-all",
+            "DISPLAY": ":0.0",
+        ]
+        dxvkProcess.currentDirectoryURL = URL(fileURLWithPath: bottlePath)
+        do {
+            try dxvkProcess.run()
+            dxvkProcess.waitUntilExit()
+            await MainActor.run {
+                if dxvkProcess.terminationStatus == 0 {
+                    self.installationStatus = "✅ DXVK (DirectX 11/10/9) installed in Wine prefix."
+                } else {
+                    self.installationStatus = "⚠️ Failed to install DXVK in Wine prefix."
+                }
+            }
+        } catch {
+            await MainActor.run {
+                self.installationStatus =
+                    "❌ Error running winetricks dxvk: \(error.localizedDescription)"
             }
         }
     }

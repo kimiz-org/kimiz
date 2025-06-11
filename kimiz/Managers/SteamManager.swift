@@ -122,6 +122,9 @@ internal class SteamManager: ObservableObject {
 
     /// Launch Steam in legacy/small mode for best compatibility
     func launchSteam() async throws {
+        // Ensure DXVK is installed before launching Steam
+        try await installDXVKIfNeeded()
+
         let steamExePath = defaultBottlePath + "/drive_c/Program Files (x86)/Steam/steam.exe"
         guard fileManager.fileExists(atPath: steamExePath) else {
             throw NSError(
@@ -244,6 +247,9 @@ internal class SteamManager: ObservableObject {
 
     /// Launch a Steam game using Wine/GPTK
     func launchGame(_ game: SteamGame) async throws {
+        // Ensure DXVK is installed before launching a game
+        try await installDXVKIfNeeded()
+
         guard let exe = game.executablePath, FileManager.default.fileExists(atPath: exe) else {
             throw NSError(
                 domain: "SteamGameLaunch", code: 1,
@@ -285,5 +291,61 @@ internal class SteamManager: ObservableObject {
             workingDirectory: gameDir,
             defaultBottlePath: defaultBottlePath
         )
+    }
+
+    /// Automatically install DXVK into the default bottle if not present
+    func installDXVKIfNeeded() async throws {
+        let bottlePath = defaultBottlePath
+        let system32 = bottlePath + "/drive_c/windows/system32"
+        let syswow64 = bottlePath + "/drive_c/windows/syswow64"
+        let dxvkDlls = ["d3d11.dll", "dxgi.dll", "d3d10.dll", "d3d10_1.dll", "d3d10core.dll"]
+        let dxvkVersion = "2.3.1"  // You may update this as needed
+        let dxvkUrl =
+            "https://github.com/doitsujin/dxvk/releases/download/v\(dxvkVersion)/dxvk-\(dxvkVersion).tar.gz"
+        let tmpDir = NSString(string: "~/Library/Application Support/kimiz/tmp")
+            .expandingTildeInPath
+        let dxvkArchive = (tmpDir as NSString).appendingPathComponent("dxvk.tar.gz")
+        let dxvkExtracted = (tmpDir as NSString).appendingPathComponent("dxvk-extracted")
+
+        // Check if DXVK DLLs already exist
+        let fileManager = FileManager.default
+        let alreadyInstalled = dxvkDlls.allSatisfy {
+            fileManager.fileExists(atPath: system32 + "/" + $0)
+        }
+        if alreadyInstalled { return }
+
+        // Download DXVK
+        if !fileManager.fileExists(atPath: dxvkArchive) {
+            let (data, _) = try await URLSession.shared.data(from: URL(string: dxvkUrl)!)
+            try data.write(to: URL(fileURLWithPath: dxvkArchive))
+        }
+
+        // Extract DXVK
+        try? fileManager.removeItem(atPath: dxvkExtracted)
+        try fileManager.createDirectory(atPath: dxvkExtracted, withIntermediateDirectories: true)
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
+        process.arguments = ["-xzf", dxvkArchive, "-C", dxvkExtracted]
+        try process.run()
+        process.waitUntilExit()
+
+        // Find the x64 and x32 DLLs
+        let dxvkX64 = dxvkExtracted + "/dxvk-\(dxvkVersion)/x64"
+        let dxvkX32 = dxvkExtracted + "/dxvk-\(dxvkVersion)/x32"
+        // Copy DLLs to system32 (x64) and syswow64 (x32)
+        for dll in dxvkDlls {
+            let src64 = dxvkX64 + "/" + dll
+            let dst64 = system32 + "/" + dll
+            if fileManager.fileExists(atPath: src64) {
+                try? fileManager.removeItem(atPath: dst64)
+                try fileManager.copyItem(atPath: src64, toPath: dst64)
+            }
+            let src32 = dxvkX32 + "/" + dll
+            let dst32 = syswow64 + "/" + dll
+            if fileManager.fileExists(atPath: src32) {
+                try? fileManager.removeItem(atPath: dst32)
+                try fileManager.copyItem(atPath: src32, toPath: dst32)
+            }
+        }
     }
 }
