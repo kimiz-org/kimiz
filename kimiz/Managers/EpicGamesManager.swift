@@ -7,7 +7,6 @@
 
 import Foundation
 import SwiftUI
-import kimiz
 
 // Epic Game model for library integration
 struct EpicGame: Identifiable, Codable {

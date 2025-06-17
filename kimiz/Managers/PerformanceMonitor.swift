@@ -25,8 +25,8 @@ class PerformanceMonitor: ObservableObject {
     @Published var alerts: [PerformanceAlert] = []
 
     // MARK: - Configuration
-    @Published var cpuThreshold: Double = 80.0
-    @Published var memoryThreshold: Double = 85.0
+    @Published var cpuThreshold: Double = 95.0  // Increased from 80%
+    @Published var memoryThreshold: Double = 90.0  // Increased from 85%
     @Published var enableAutoOptimization = true
     @Published var enableAlerts = true
     @Published var monitoringInterval: TimeInterval = 2.0

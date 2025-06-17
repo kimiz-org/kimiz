@@ -47,10 +47,10 @@ internal actor WineManager {
     // Process and resource management
     private var activeProcesses: Set<Int32> = []
     private let processQueue = DispatchQueue(label: "kimiz.wine.process.queue", qos: .userInitiated)
-    private let maxConcurrentProcesses = 3
-    private let cpuThrottleThreshold: Double = 80.0
+    private let maxConcurrentProcesses = 5  // Increased from 3
+    private let cpuThrottleThreshold: Double = 90.0  // Increased from 80% to 90%
     private let processTimeout: TimeInterval = 1800.0
-    private let gameTimeout: TimeInterval = 3600.0
+    private let gameTimeout: TimeInterval = 7200.0  // Increased game timeout
     private let installerTimeout: TimeInterval = 7200.0
 
     // MARK: - Public API
@@ -543,5 +543,45 @@ internal actor WineManager {
 
         // Clean up temporary reg file
         try? fileManager.removeItem(atPath: regFilePath)
+    }
+
+    // MARK: - Game Launch Optimization
+    
+    /// Create optimized environment for game launches to prevent black screens
+    private func createGameLaunchEnvironment(base: [String: String]) -> [String: String] {
+        var environment = base
+        
+        // Graphics optimization settings
+        environment["DXVK_ASYNC"] = "1"
+        environment["DXVK_STATE_CACHE"] = "1"
+        environment["DXVK_SHADER_CACHE"] = "1"
+        environment["DXVK_HUD"] = "0"  // Disable HUD overlay
+        environment["DXVK_FILTER_DEVICE_NAME"] = "0"
+        
+        // Wine graphics settings
+        environment["WINE_LARGE_ADDRESS_AWARE"] = "1"
+        environment["WINE_CPU_TOPOLOGY"] = "4:2"
+        environment["WINEDLLOVERRIDES"] = "winemenubuilder.exe=d;mscoree=d;mshtml=d"
+        
+        // OpenGL/Metal optimization
+        environment["__GL_SHADER_DISK_CACHE"] = "1"
+        environment["__GL_SHADER_DISK_CACHE_PATH"] = defaultBottlePath + "/shader_cache"
+        environment["MESA_GLSL_CACHE_DISABLE"] = "false"
+        environment["MESA_GLSL_CACHE_MAX_SIZE"] = "1G"
+        
+        // Display settings to prevent black screen
+        environment["DISPLAY"] = ":0"
+        environment["WINE_DISABLE_LAYER_COMPOSITOR"] = "0"  // Enable compositor for better compatibility
+        environment["WINE_SYNCHRONOUS"] = "0"  // Disable synchronous mode for better performance
+        
+        // Memory optimization
+        environment["WINE_HEAP_SIZE"] = "2G"
+        environment["WINEDEBUG"] = "-all"  // Disable debug output for performance
+        
+        // Disable problematic Windows services
+        environment["WINE_DISABLE_SVCHOST"] = "1"
+        environment["WINE_DISABLE_EXPLORER"] = "1"
+        
+        return environment
     }
 }

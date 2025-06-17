@@ -120,10 +120,13 @@ internal class SteamManager: ObservableObject {
         }
     }
 
-    /// Launch Steam in legacy/small mode for best compatibility
+    /// Launch Steam in legacy/small mode for best compatibility with black screen prevention
     func launchSteam() async throws {
         // Ensure DXVK is installed before launching Steam
         try await installDXVKIfNeeded()
+        
+        // Apply Steam-specific compatibility fixes
+        await GamePortingToolkitManager.shared.fixSteamGameCompatibility()
 
         let steamExePath = defaultBottlePath + "/drive_c/Program Files (x86)/Steam/steam.exe"
         guard fileManager.fileExists(atPath: steamExePath) else {
@@ -138,6 +141,8 @@ internal class SteamManager: ObservableObject {
         var environment = [
             "WINEPREFIX": defaultBottlePath,
             "WINE_LARGE_ADDRESS_AWARE": "1",
+            
+            // Steam WebHelper and browser fixes
             "STEAM_WEBHELPER_DISABLED": "1",
             "STEAM_WEBHELPER_RENDERING": "disabled",
             "STEAM_USE_WEBHELPER": "0",
@@ -149,24 +154,39 @@ internal class SteamManager: ObservableObject {
             "STEAM_DISABLE_OVERLAY": "1",
             "STEAM_DISABLE_CHROME": "1",
             "STEAM_DISABLE_WEBVIEW": "1",
+            
+            // Graphics optimization to prevent black screens
+            "DXVK_ASYNC": "1",
+            "DXVK_STATE_CACHE": "1",
+            "DXVK_SHADER_CACHE": "1",
+            "DXVK_HUD": "0",
+            "__GL_SHADER_DISK_CACHE": "1",
+            "MESA_GLSL_CACHE_DISABLE": "false",
+            
+            // Display settings
             "DISPLAY": ":0.0",
             "WINE_DISABLE_LAYER_COMPOSITOR": "1",
-            "WINEDLLOVERRIDES": "winemenubuilder.exe=d",
+            "WINEDLLOVERRIDES": "winemenubuilder.exe=d;steamwebhelper.exe=d",
         ]
         // Add Wine-specific tweaks if using Wine
         if winePath.contains("wine") {
             environment["WINEDEBUG"] = "-all"
             environment["WINE_CPU_TOPOLOGY"] = "4:2"
         }
-        // Launch Steam in small mode/legacy UI
+        // Launch Steam in small mode/legacy UI with additional compatibility flags
         let steamArguments = [
             "-no-cef-sandbox",
             "-noreactlogin",
             "-no-browser",
             "-vgui",
+            "-silent",
+            "-nofriendsui",
+            "-no-dwrite",
+            "-nointro",
+            "-nobootstrapupdate",
             "+open", "steam://open/minigameslist",
         ]
-        // Optionally: Rename steamwebhelper.exe to prevent it from running at all
+        // Rename steamwebhelper.exe to prevent it from running at all
         let steamWebHelperPath =
             (steamExePath as NSString).deletingLastPathComponent + "/steamwebhelper.exe"
         if fileManager.fileExists(atPath: steamWebHelperPath) {
@@ -245,7 +265,7 @@ internal class SteamManager: ObservableObject {
         }
     }
 
-    /// Launch a Steam game using Wine/GPTK
+    /// Launch a Steam game using Wine/GPTK with optimized settings to prevent black screens
     func launchGame(_ game: SteamGame) async throws {
         // Ensure DXVK is installed before launching a game
         try await installDXVKIfNeeded()
@@ -255,38 +275,58 @@ internal class SteamManager: ObservableObject {
                 domain: "SteamGameLaunch", code: 1,
                 userInfo: [NSLocalizedDescriptionKey: "Steam game executable not found."])
         }
-        let possibleGPTKPaths = [
-            "/opt/homebrew/bin/game-porting-toolkit",
-            "/usr/local/bin/game-porting-toolkit",
-            "/opt/homebrew/Cellar/game-porting-toolkit/1.1/bin/game-porting-toolkit",
-            "/usr/local/Cellar/game-porting-toolkit/1.1/bin/game-porting-toolkit",
-        ]
-        let possibleWinePaths = [
-            "/opt/homebrew/bin/wine",
-            "/usr/local/bin/wine",
-            "/opt/homebrew/bin/wine64",
-            "/usr/local/bin/wine64",
-        ]
-        var winePath: String?
-        winePath = possibleGPTKPaths.first(where: { fileManager.fileExists(atPath: $0) })
-        if winePath == nil {
-            winePath = possibleWinePaths.first(where: { fileManager.fileExists(atPath: $0) })
-        }
-        guard let finalWinePath = winePath else {
-            throw NSError(
-                domain: "SteamGameLaunch", code: 2,
-                userInfo: [
-                    NSLocalizedDescriptionKey: "Neither Game Porting Toolkit nor Wine found."
-                ])
-        }
+        
+        let winePath = try findWineOrGPTK()
         let gameDir = (exe as NSString).deletingLastPathComponent
-        let environment = [
+        
+        // Optimized environment for preventing black screens
+        var environment = [
             "WINEPREFIX": defaultBottlePath,
             "WINE_LARGE_ADDRESS_AWARE": "1",
+            
+            // Graphics optimization to prevent black screens
+            "DXVK_ASYNC": "1",
+            "DXVK_STATE_CACHE": "1", 
+            "DXVK_SHADER_CACHE": "1",
+            "DXVK_HUD": "0",
+            "DXVK_FILTER_DEVICE_NAME": "0",
+            
+            // Display settings
+            "DISPLAY": ":0",
+            "WINE_SYNCHRONOUS": "0",
+            "WINEDEBUG": "-all",
+            
+            // OpenGL/Metal optimization
+            "__GL_SHADER_DISK_CACHE": "1",
+            "__GL_SHADER_DISK_CACHE_PATH": defaultBottlePath + "/shader_cache",
+            "MESA_GLSL_CACHE_DISABLE": "false",
+            "MESA_GLSL_CACHE_MAX_SIZE": "1G",
+            
+            // CPU optimization
+            "WINE_CPU_TOPOLOGY": "4:2",
+            "WINE_HEAP_SIZE": "2G",
+            
+            // Disable problematic features
+            "WINEDLLOVERRIDES": "winemenubuilder.exe=d;mscoree=d;mshtml=d",
+            "WINE_DISABLE_SVCHOST": "1"
         ]
+        
+        // Add game-specific arguments to improve compatibility
+        var gameArguments: [String] = []
+        
+        // Check if it's a known problematic game and add fixes
+        let gameName = game.name.lowercased()
+        if gameName.contains("dx11") || gameName.contains("directx") {
+            gameArguments.append("-dx11")
+        }
+        if gameName.contains("fullscreen") {
+            gameArguments.append("-windowed")  // Force windowed mode to prevent black screen
+        }
+        
         try await WineManager.shared.runWineProcess(
-            winePath: finalWinePath,
+            winePath: winePath,
             executablePath: exe,
+            arguments: gameArguments,
             environment: environment,
             workingDirectory: gameDir,
             defaultBottlePath: defaultBottlePath
