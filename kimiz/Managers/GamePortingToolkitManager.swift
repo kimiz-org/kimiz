@@ -105,33 +105,10 @@ internal class GamePortingToolkitManager: ObservableObject {
     @Published var showInstallGPTKButton = false
     @Published var gptkVersion: String? = nil
 
+    private let gptkAppPath = "/Applications/Game Porting Toolkit.app/Contents/MacOS/game-porting-toolkit"
+
     func checkGPTKInstallation() async {
-        // Check for GPTK 2.1 in actual installation locations (Apple DMG installs to /usr/local/bin)
-        let possibleGPTKPaths = [
-            "/usr/local/bin/game-porting-toolkit",  // GPTK 2.1 primary location (from DMG)
-            "/usr/local/bin/gameportingtoolkit",  // Alternative naming
-            "/usr/local/bin/wine64",  // Wine 64-bit (fallback compatibility)
-            "/usr/local/bin/wine",  // Wine 32-bit (fallback compatibility)
-            "/opt/homebrew/bin/wine64",  // Homebrew Wine (fallback)
-            "/opt/homebrew/bin/wine",  // Homebrew Wine (fallback)
-        ]
-
-        var foundPath: String?
-
-        // Check each path, including wildcard paths
-        for path in possibleGPTKPaths {
-            if path.contains("*") {
-                // Handle wildcard paths
-                if await checkWildcardPath(path) {
-                    foundPath = path
-                    break
-                }
-            } else if fileManager.fileExists(atPath: path) {
-                foundPath = path
-                break
-            }
-        }
-
+        let foundPath: String? = fileManager.fileExists(atPath: gptkAppPath) ? gptkAppPath : nil
         let version = await detectGPTKVersion(at: foundPath)
 
         await MainActor.run {
@@ -149,6 +126,48 @@ internal class GamePortingToolkitManager: ObservableObject {
                 initializationStatus = "Game Porting Toolkit 2.1 not installed"
                 showInstallGPTKButton = true
             }
+        }
+    }
+
+    private func detectGPTKVersion(at path: String?) async -> String {
+        guard let path = path, fileManager.fileExists(atPath: path) else {
+            return "Not installed"
+        }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: path)
+        process.arguments = ["--version"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+        do {
+            try process.run()
+            process.waitUntilExit()
+            
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            if let output = String(data: data, encoding: .utf8) {
+                if output.contains("2.1") {
+                    return "Game Porting Toolkit 2.1"
+                } else if output.contains("wine") {
+                    return "Wine (Legacy compatibility)"
+                }
+            }
+        } catch {
+            if path.contains("game-porting-toolkit") {
+                return "Game Porting Toolkit 2.1 (Detected)"
+            }
+        }
+        return "Unknown version"
+    }
+
+    func isGamePortingToolkitInstalled() -> Bool {
+        return fileManager.fileExists(atPath: gptkAppPath)
+    }
+
+    /// Install compatibility layer (Wine-based) since GPTK 2.1 requires manual Apple Developer download
+    func installGamePortingToolkit() async throws {
+        await MainActor.run {
+            self.isInstallingComponents = false
+            self.installationStatus = "Please install Game Porting Toolkit from Apple Developer manually in /Applications."
         }
     }
 
@@ -174,337 +193,7 @@ internal class GamePortingToolkitManager: ObservableObject {
         return false
     }
 
-    private func detectGPTKVersion(at path: String?) async -> String {
-        guard let path = path, fileManager.fileExists(atPath: path) else {
-            return "Not installed"
-        }
-
-        // Try to get version information
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: path)
-        process.arguments = ["--version"]
-
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            if let output = String(data: data, encoding: .utf8) {
-                if output.contains("2.1") {
-                    return "Game Porting Toolkit 2.1"
-                } else if output.contains("wine") {
-                    return "Wine (Legacy compatibility)"
-                }
-            }
-        } catch {
-            // If version check fails, check if it's in the GPTK 2.1 location
-            if path.contains("game-porting-toolkit") && !path.contains("homebrew") {
-                return "Game Porting Toolkit 2.1 (Detected)"
-            }
-        }
-
-        return "Unknown version"
-    }
-
-    func isGamePortingToolkitInstalled() -> Bool {
-        // Check for Apple's official GPTK 2.1 installation (command-line tools only)
-        let gptkPaths = [
-            "/usr/local/bin/game-porting-toolkit",  // GPTK 2.1 primary location
-            "/usr/local/bin/gameportingtoolkit",  // Alternative naming
-            "/usr/local/bin/wine64",  // Wine 64-bit (fallback)
-            "/usr/local/bin/wine",  // Wine 32-bit (fallback)
-            "/opt/homebrew/bin/wine64",  // Homebrew Wine (fallback)
-            "/opt/homebrew/bin/wine",  // Homebrew Wine (fallback)
-        ]
-
-        return gptkPaths.contains { path in
-            FileManager.default.fileExists(atPath: path)
-        }
-    }
-
-    /// Install compatibility layer (Wine-based) since GPTK 2.1 requires manual Apple Developer download
-    func installGamePortingToolkit() async throws {
-        await MainActor.run {
-            self.isInstallingComponents = true
-            self.installationProgress = 0.0
-            self.installationStatus = "Starting compatibility layer installation..."
-        }
-
-        do {
-            // Step 1: Check for Xcode Command Line Tools
-            try await checkXcodeCommandLineTools()
-
-            await MainActor.run {
-                self.installationProgress = 0.2
-                self.installationStatus = "Checking system requirements..."
-            }
-
-            // Step 2: Install compatibility layer automatically
-            try await installGPTKAutomatically()
-
-            await MainActor.run {
-                self.installationProgress = 0.9
-                self.installationStatus = "Verifying installation..."
-            }
-
-            // Step 3: Verify installation
-            await checkGPTKInstallation()
-
-            await MainActor.run {
-                self.installationProgress = 1.0
-                self.installationStatus = "Wine compatibility layer installed successfully!"
-                self.isInstallingComponents = false
-            }
-        } catch {
-            await MainActor.run {
-                self.isInstallingComponents = false
-                self.installationStatus = "Installation failed: \(error.localizedDescription)"
-            }
-            throw error
-        }
-    }
-
-    private func checkXcodeCommandLineTools() async throws {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/xcode-select")
-        process.arguments = ["-p"]
-
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
-
-        try process.run()
-        process.waitUntilExit()
-
-        if process.terminationStatus != 0 {
-            throw GPTKError.installationFailed(
-                "Xcode Command Line Tools are required. Please install them first by running 'xcode-select --install'"
-            )
-        }
-    }
-
-    private func installGPTKAutomatically() async throws {
-        await MainActor.run {
-            self.installationProgress = 0.3
-            self.installationStatus = "Setting up Windows game compatibility..."
-        }
-
-        // Method 1: Try Wine installation via Homebrew (most reliable)
-        if await tryHomebrewGPTKInstallation() {
-            return
-        }
-
-        // Method 2: Try to find GPTK in Xcode (rare but possible)
-        if await tryXcodeGPTKInstallation() {
-            return
-        }
-
-        // Method 3: Set up Wine compatibility wrapper
-        try await tryCommandLineGPTKInstallation()
-    }
-
-    private func tryHomebrewGPTKInstallation() async -> Bool {
-        await MainActor.run {
-            self.installationStatus = "Installing Wine dependencies via Homebrew..."
-        }
-
-        do {
-            // First, ensure Homebrew is installed
-            try await ensureHomebrewInstalled()
-
-            await MainActor.run {
-                self.installationProgress = 0.5
-                self.installationStatus = "Installing Wine as GPTK alternative..."
-            }
-
-            // Install Wine as a compatibility layer (since GPTK 2.1 isn't in Homebrew)
-            let brewPath =
-                fileManager.fileExists(atPath: "/opt/homebrew/bin/brew")
-                ? "/opt/homebrew/bin/brew" : "/usr/local/bin/brew"
-
-            let installProcess = Process()
-            installProcess.executableURL = URL(fileURLWithPath: brewPath)
-            installProcess.arguments = ["install", "wine-stable"]
-            try installProcess.run()
-            installProcess.waitUntilExit()
-
-            if installProcess.terminationStatus == 0 {
-                await MainActor.run {
-                    self.installationProgress = 0.8
-                    self.installationStatus = "Wine installed successfully as compatibility layer!"
-                }
-                return true
-            }
-        } catch {
-            print("Homebrew Wine installation failed: \(error)")
-        }
-
-        return false
-    }
-
-    private func tryXcodeGPTKInstallation() async -> Bool {
-        await MainActor.run {
-            self.installationStatus = "Checking for GPTK in Xcode installation..."
-        }
-
-        // Check if GPTK is available through Xcode (uncommon but possible)
-        let xcodePaths = [
-            "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/bin/game-porting-toolkit",
-            "/Applications/Xcode.app/Contents/Developer/usr/bin/game-porting-toolkit",
-            "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/game-porting-toolkit",
-        ]
-
-        for path in xcodePaths {
-            if fileManager.fileExists(atPath: path) {
-                // Create symlink to standard location
-                do {
-                    let targetPath = "/usr/local/bin/game-porting-toolkit"
-                    // Ensure directory exists
-                    try? fileManager.createDirectory(
-                        atPath: "/usr/local/bin", withIntermediateDirectories: true, attributes: nil
-                    )
-                    try? fileManager.removeItem(atPath: targetPath)
-                    try fileManager.createSymbolicLink(
-                        atPath: targetPath, withDestinationPath: path)
-
-                    await MainActor.run {
-                        self.installationProgress = 0.8
-                        self.installationStatus = "GPTK 2.1 configured from Xcode!"
-                    }
-                    return true
-                } catch {
-                    print("Failed to create symlink: \(error)")
-                }
-            }
-        }
-
-        await MainActor.run {
-            self.installationStatus = "GPTK not found in Xcode installation"
-        }
-
-        return false
-    }
-
-    private func tryCommandLineGPTKInstallation() async throws {
-        await MainActor.run {
-            self.installationStatus = "Setting up Wine compatibility layer..."
-        }
-
-        // Since GPTK 2.1 requires manual download from Apple Developer portal,
-        // we'll set up a Wine-based compatibility system instead
-        let script = """
-            #!/bin/bash
-            set -e
-
-            # Create local bin directory if it doesn't exist
-            mkdir -p /usr/local/bin
-
-            # Check if we have wine installed via any method
-            WINE_PATH=""
-            if command -v wine >/dev/null 2>&1; then
-                WINE_PATH=$(command -v wine)
-            elif [ -f "/opt/homebrew/bin/wine" ]; then
-                WINE_PATH="/opt/homebrew/bin/wine"
-            elif [ -f "/usr/local/bin/wine" ]; then
-                WINE_PATH="/usr/local/bin/wine"
-            fi
-
-            if [ -n "$WINE_PATH" ]; then
-                # Create a compatibility script that acts as game-porting-toolkit
-                cat > /usr/local/bin/game-porting-toolkit << 'EOF'
-            #!/bin/bash
-            # Game Porting Toolkit compatibility wrapper
-            # Uses Wine as the underlying compatibility layer
-            WINE_PATH="$(command -v wine || echo "/opt/homebrew/bin/wine")"
-            if [ -f "$WINE_PATH" ]; then
-                exec "$WINE_PATH" "$@"
-            else
-                echo "Wine compatibility layer not found"
-                exit 1
-            fi
-            EOF
-                chmod +x /usr/local/bin/game-porting-toolkit
-                echo "Wine compatibility layer configured successfully"
-            else
-                echo "No Wine installation found"
-                exit 1
-            fi
-            """
-
-        let scriptPath = NSTemporaryDirectory() + "setup_compatibility.sh"
-        try script.write(to: URL(fileURLWithPath: scriptPath), atomically: true, encoding: .utf8)
-
-        // Make script executable
-        let chmodProcess = Process()
-        chmodProcess.executableURL = URL(fileURLWithPath: "/bin/chmod")
-        chmodProcess.arguments = ["+x", scriptPath]
-        try chmodProcess.run()
-        chmodProcess.waitUntilExit()
-
-        // Run the setup script with admin privileges
-        let appleScript = """
-            do shell script "bash '\(scriptPath)'" with administrator privileges
-            """
-
-        let osascriptProcess = Process()
-        osascriptProcess.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        osascriptProcess.arguments = ["-e", appleScript]
-
-        try osascriptProcess.run()
-        osascriptProcess.waitUntilExit()
-
-        // Clean up
-        try? fileManager.removeItem(atPath: scriptPath)
-
-        if osascriptProcess.terminationStatus == 0 {
-            await MainActor.run {
-                self.installationProgress = 0.8
-                self.installationStatus = "Wine compatibility layer configured successfully!"
-            }
-        } else {
-            throw GPTKError.installationFailed(
-                "Could not set up compatibility layer. Make sure Wine is installed first.")
-        }
-    }
-
-    private func ensureHomebrewInstalled() async throws {
-        // Check if Homebrew is already installed
-        if fileManager.fileExists(atPath: "/opt/homebrew/bin/brew")
-            || fileManager.fileExists(atPath: "/usr/local/bin/brew")
-        {
-            return
-        }
-
-        await MainActor.run {
-            self.installationStatus = "Installing Homebrew (required for GPTK)..."
-        }
-
-        // Install Homebrew automatically
-        let installScript = """
-            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-            """
-
-        let appleScript = """
-            do shell script "\(installScript)" with administrator privileges
-            """
-
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        process.arguments = ["-e", appleScript]
-
-        try process.run()
-        process.waitUntilExit()
-
-        if process.terminationStatus != 0 {
-            throw GPTKError.installationFailed(
-                "Failed to install Homebrew. Please install it manually from https://brew.sh"
-            )
-        }
-    }
+    // MARK: - Component Management
 
     /// Install only the dependencies (GPTK components)
     func installDependenciesOnly() async throws {
@@ -512,64 +201,18 @@ internal class GamePortingToolkitManager: ObservableObject {
             installationProgress = 0.1
             installationStatus = "🔍 Checking for Game Porting Toolkit..."
         }
-
-        // Check if GPTK is already installed
-        let possibleGPTKPaths = [
-            "/opt/homebrew/bin/game-porting-toolkit",
-            "/usr/local/bin/game-porting-toolkit",
-            "/opt/homebrew/Cellar/game-porting-toolkit/1.1/bin/game-porting-toolkit",
-            "/usr/local/Cellar/game-porting-toolkit/1.1/bin/game-porting-toolkit",
-        ]
-
-        if let existingPath = possibleGPTKPaths.first(where: {
-            FileManager.default.fileExists(atPath: $0)
-        }) {
+        if fileManager.fileExists(atPath: gptkAppPath) {
             await MainActor.run {
                 installationProgress = 1.0
-                installationStatus = "✅ Game Porting Toolkit already installed at \(existingPath)"
+                installationStatus = "✅ Game Porting Toolkit already installed at \(gptkAppPath)"
                 self.initializationStatus = "GPTK ready for use!"
                 self.isGPTKInstalled = true
             }
             return
         }
-
-        await MainActor.run {
-            installationProgress = 0.3
-            installationStatus = "📋 Game Porting Toolkit not found. Please install it manually."
-        }
-
-        // Set up default bottle directory
-        let defaultBottlePath = NSString(
-            string: "~/Library/Application Support/kimiz/gptk-bottles/default"
-        ).expandingTildeInPath
-        try? FileManager.default.createDirectory(
-            atPath: defaultBottlePath, withIntermediateDirectories: true, attributes: nil)
-
-        await MainActor.run {
-            installationProgress = 0.6
-            installationStatus = "📁 Setting up Wine bottle directories..."
-        }
-
-        // Create necessary directories for Wine environment
-        let directories = [
-            "drive_c",
-            "drive_c/Program Files",
-            "drive_c/Program Files (x86)",
-            "drive_c/users",
-            "drive_c/windows",
-            "drive_c/windows/system32",
-        ]
-
-        for dir in directories {
-            let dirPath = (defaultBottlePath as NSString).appendingPathComponent(dir)
-            try? FileManager.default.createDirectory(
-                atPath: dirPath, withIntermediateDirectories: true, attributes: nil)
-        }
-
         await MainActor.run {
             installationProgress = 1.0
-            installationStatus =
-                "⚠️ Please install Game Porting Toolkit manually. Bottle structure prepared."
+            installationStatus = "📋 Game Porting Toolkit not found. Please install it manually in /Applications."
             self.initializationStatus = "Manual GPTK installation required"
         }
     }
@@ -763,16 +406,7 @@ internal class GamePortingToolkitManager: ObservableObject {
 
     /// Automatically install all required software for running games
     func autoSetupGameEnvironment() async {
-        // 1. Ensure Homebrew is installed
-        do {
-            try await ensureHomebrewInstalled()
-        } catch {
-            await MainActor.run {
-                self.installationStatus =
-                    "❌ Failed to install Homebrew: \(error.localizedDescription)"
-            }
-            return
-        }
+
 
         // 2. Install Wine
         let brewPath =
@@ -2376,15 +2010,7 @@ internal class GamePortingToolkitManager: ObservableObject {
     }
     
     private func checkGPTKInstalled() -> Bool {
-        let gptkPaths = [
-            "/usr/local/bin/game-porting-toolkit",
-            "/usr/local/bin/gameportingtoolkit",
-            "/Applications/Game Porting Toolkit.app"
-        ]
-        
-        return gptkPaths.contains { path in
-            fileManager.fileExists(atPath: path)
-        }
+        return getGPTKBinaryPath() != nil
     }
     
     /// Check installation status of all components
@@ -2398,5 +2024,21 @@ internal class GamePortingToolkitManager: ObservableObject {
             self.directxInstalled = checkDirectXInstalled()
             self.gptkInstalled = checkGPTKInstalled()
         }
+    }
+    
+    /// Dynamically finds the GPTK binary path inside the app bundle
+    func getGPTKBinaryPath() -> String? {
+        let macOSDir = "/Applications/Game Porting Toolkit.app/Contents/MacOS/"
+        guard let contents = try? fileManager.contentsOfDirectory(atPath: macOSDir) else { return nil }
+        for item in contents {
+            let fullPath = macOSDir + item
+            var isDir: ObjCBool = false
+            if fileManager.fileExists(atPath: fullPath, isDirectory: &isDir), !isDir.boolValue {
+                if fileManager.isExecutableFile(atPath: fullPath) {
+                    return fullPath
+                }
+            }
+        }
+        return nil
     }
 }
